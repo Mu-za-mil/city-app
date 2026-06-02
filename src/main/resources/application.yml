@@ -1,0 +1,163 @@
+spring:
+  application:
+    name: city-app-backend
+
+
+  # ── DATABASE ────────────────────────────────────────────────────────────
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cityapp}
+    username: ${DB_USERNAME:cityapp}
+    password: ${DB_PASSWORD:cityapp_password}
+    hikari:
+      maximum-pool-size: 25
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      # WHY these numbers:
+      # pool-size 25: handles 25 concurrent DB operations per JVM
+      # idle-timeout 10min: close idle connections so DB isn't overwhelmed
+      # max-lifetime 30min: prevents stale connections that PostgreSQL cleaned up
+
+  jpa:
+    open-in-view: false
+    # ❌ NEVER set this to true in production.
+    # WHY: true keeps the DB connection open for the ENTIRE HTTP request,
+    # including time spent serialising JSON response.
+    # At 500 concurrent requests = 500 connections held hostage.
+    # Connection pool exhaustion = new requests hang = app appears frozen.
+    hibernate:
+      ddl-auto: validate
+      # WHY validate not create/update:
+      # 'create' drops all tables on restart (data loss in production)
+      # 'update' silently modifies schema in unpredictable ways
+      # 'validate' checks entities match DB schema, FAILS LOUDLY if not
+      # Flyway manages all schema changes. Hibernate only validates.
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+          # WHY UTC: Store all timestamps in UTC. Convert to user's timezone
+          # in the application layer. Avoids "the order was at 11 PM but
+          # shows as 5:30 AM" bugs when servers move between timezones.
+
+  # ── FLYWAY ──────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    # WHY validate-on-migrate: if someone edits a migration that already ran,
+    # the checksum changes and Flyway refuses to start. Prevents silent
+    # schema drift between environments.
+
+  # ── REDIS ───────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+
+  # ── KAFKA ───────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+        # WHY false: don't add "@class": "com.cityapp.order.event.OrderCreatedEvent"
+        # to Kafka message headers. If notification-service is in a different
+        # Maven module with a different class path, deserialisation fails.
+        # Use explicit type mapping instead.
+        acks: all
+        # WHY all: wait for ALL in-sync replicas to acknowledge.
+        # Without this: leader broker confirms → immediately crashes
+        # before replicating → message permanently lost.
+        linger.ms: 5
+        # WHY linger.ms 5: wait 5ms before sending to batch multiple messages.
+        # A small latency increase (5ms) for a significant throughput improvement.
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      # WHY false: commit offset manually after successful processing.
+      # Auto-commit: message fetched → offset committed → processing fails
+      #              → message is lost (offset already committed).
+      # Manual: message fetched → processed → THEN commit offset
+      #         → if processing fails → message redelivered.
+      properties:
+        spring.json.trusted.packages: "com.cityapp.*"
+
+  # ── MAIL ────────────────────────────────────────────────────────────────
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+
+  # ── CACHE ───────────────────────────────────────────────────────────────
+  cache:
+    type: redis
+
+  # ── APP CONFIG ───────────────────────────────────────────────────────────────
+cityapp:
+  jwt:
+      secret: ${JWT_SECRET}
+      # NO DEFAULT. App refuses to start if JWT_SECRET is not set.
+      # A startup failure is infinitely better than running with a weak/known secret.
+      access-token-expiration-ms: ${ACCESS_TOKEN_MS:900000}
+      refresh-expiration-days: ${REFRESH_TOKEN_DAYS:30}
+
+  cors:
+      allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+
+  razorpay:
+      key-id: ${RAZORPAY_KEY_ID:rzp_test_placeholder}
+      key-secret: ${RAZORPAY_KEY_SECRET:placeholder}
+      webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:placeholder}
+
+  outbox:
+      poll-interval-ms: 5000
+      batch-size: 100
+      retention-days: 7
+
+  websocket:
+      redis-relay-enabled: ${WEBSOCKET_REDIS_RELAY:false}
+
+# ── ACTUATOR ─────────────────────────────────────────────────────────────────
+management:
+    endpoints:
+      web:
+        exposure:
+          include: health,info,prometheus,metrics,env
+    endpoint:
+      health:
+        probes:
+          enabled: true
+          # WHY probes: Kubernetes calls /actuator/health/liveness and /readiness
+          # separately. Liveness = JVM is alive (don't kill it).
+          # Readiness = can serve traffic (is DB connected? Is Redis up?).
+          # Combining them means a DB blip kills the pod unnecessarily.
+    tracing:
+      sampling:
+        probability: ${TRACE_SAMPLE_RATE:1.0}
+    zipkin:
+      tracing:
+        endpoint: ${ZIPKIN_URL:http://localhost:9411/api/v2/spans}
+
+  # ── LOGGING ──────────────────────────────────────────────────────────────────
+logging:
+    level:
+      com.cityapp: INFO
+      org.hibernate.SQL: OFF
+      org.springframework.security: WARN
+      org.springframework.cache: WARN
+
+

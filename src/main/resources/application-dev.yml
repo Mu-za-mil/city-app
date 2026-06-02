@@ -1,0 +1,52 @@
+# ============================================================================
+# DEV PROFILE — Local development only. Never reaches production.
+# ============================================================================
+
+cityapp:
+  jwt:
+    # Explicit dev-only secret. The word "dev_only" makes it obvious.
+    # If this appears in production logs: something is seriously wrong.
+    secret: dev_only_secret_for_local_development_min32chars_long
+
+  razorpay:
+    key-id:         ${RAZORPAY_KEY_ID:rzp_test_placeholder}
+    key-secret:     ${RAZORPAY_KEY_SECRET:test_secret}
+    webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:dev_webhook_secret}
+
+  otp:
+    sms-enabled: false
+    # WHY false in dev: prevents accidentally sending real SMS to test numbers
+    # OTP codes are printed to console log and sent to MailHog instead
+
+  websocket:
+    redis-relay-enabled: false
+    # WHY false: single instance in dev. Redis relay only needed for HA.
+
+spring:
+  jpa:
+    show-sql: true
+    # WHY show-sql: every SQL query printed to console.
+    # IMMEDIATELY reveals N+1 queries: see 21 SELECT statements for 20 products.
+    properties:
+      hibernate:
+        format_sql: true
+  thymeleaf:
+    cache: false
+    # WHY false: reload email templates without restarting the app
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+      # 100% sampling in dev: trace every single request
+      # In production: 5% (0.05) to avoid Zipkin storage costs
+
+logging:
+  level:
+    com.cityapp: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.cache: TRACE
+    # TRACE on cache: shows every @Cacheable hit and miss
+    # Invaluable for debugging "why is stale data being served"
+    org.springframework.kafka: INFO
