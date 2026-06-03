@@ -26,7 +26,7 @@ services:
       POSTGRES_USER:     cityapp
       POSTGRES_PASSWORD: cityapp_password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Named volume: data persists between container restarts.
