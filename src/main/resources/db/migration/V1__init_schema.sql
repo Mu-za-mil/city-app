@@ -124,3 +124,188 @@ CREATE TABLE user_addresses (
 );
 
 CREATE INDEX idx_user_addresses_user ON user_addresses(user_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- CATEGORIES
+-- A flat list of store/product categories (Grocery, Electronics, etc.)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE categories (
+                            id          BIGSERIAL       PRIMARY KEY,
+                            name        VARCHAR(100)    NOT NULL UNIQUE,
+                            slug        VARCHAR(100)    NOT NULL UNIQUE,
+    -- slug: URL-friendly version. "Fresh Produce" → "fresh-produce"
+    -- Used in URLs: GET /stores?category=fresh-produce
+                            icon_url    VARCHAR(500),
+                            active      BOOLEAN         NOT NULL DEFAULT TRUE,
+                            created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+-- Seed default categories
+INSERT INTO categories (name, slug) VALUES
+                                        ('Grocery & Supermarket', 'grocery'),
+                                        ('Electronics & Gadgets', 'electronics'),
+                                        ('Restaurants & Food', 'food'),
+                                        ('Pharmacy & Health', 'pharmacy'),
+                                        ('Fashion & Clothing', 'fashion'),
+                                        ('Home & Kitchen', 'home-kitchen'),
+                                        ('Books & Stationery', 'books'),
+                                        ('Sports & Fitness', 'sports'),
+                                        ('Beauty & Personal Care', 'beauty'),
+                                        ('Toys & Kids', 'toys'),
+                                        ('Bakery & Sweets', 'bakery'),
+                                        ('Organic & Natural', 'organic'),
+                                        ('Pet Supplies', 'pets'),
+                                        ('Hardware & Tools', 'hardware'),
+                                        ('Gifts & Flowers', 'gifts'),
+                                        ('Auto & Vehicles', 'auto');
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- STORES
+-- Physical store locations. Managed by sellers.
+-- GPS coordinates for nearby search.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE stores (
+                        id              BIGSERIAL           PRIMARY KEY,
+                        owner_id        BIGINT              NOT NULL REFERENCES users(id),
+    -- FK to users: the seller who owns this store
+                        category_id     BIGINT              REFERENCES categories(id),
+    -- Nullable: store may be created before category is assigned
+                        name            VARCHAR(200)        NOT NULL,
+                        description     VARCHAR(2000),
+                        address         VARCHAR(500),
+                        city            VARCHAR(100),
+                        state           VARCHAR(100),
+                        pincode         VARCHAR(10),
+
+    -- GPS coordinates for Haversine/PostGIS nearby search
+                        latitude        DOUBLE PRECISION,
+                        longitude       DOUBLE PRECISION,
+                        location        GEOGRAPHY(POINT, 4326),
+    -- GEOGRAPHY: PostGIS type for GPS coordinates on Earth's curved surface.
+    -- Enables spatial indexing for fast nearby queries.
+    -- Populated automatically by trigger when lat/lng are set.
+
+    -- Operating hours (IST — all times stored and compared in IST)
+                        opening_time    TIME,   -- e.g. 09:00:00
+                        closing_time    TIME,   -- e.g. 22:00:00
+    -- WHY TIME not TIMESTAMPTZ: operating hours repeat daily.
+    -- "Opens at 9 AM" doesn't have a date component.
+
+                        open            BOOLEAN             NOT NULL DEFAULT FALSE,
+    -- open: seller toggles this manually. Can be overridden by the scheduler.
+    -- "I'm closing early today" → set open=false despite configured hours.
+
+                        status          VARCHAR(30)         NOT NULL DEFAULT 'PENDING_APPROVAL'
+                            CHECK (status IN ('PENDING_APPROVAL', 'ACTIVE', 'SUSPENDED', 'CLOSED')),
+    -- PENDING_APPROVAL: newly registered, waiting for admin review
+    -- ACTIVE: approved and can receive orders
+    -- SUSPENDED: violated terms, temporarily blocked
+    -- CLOSED: permanently closed
+
+                        min_order_amount    NUMERIC(10,2)   DEFAULT 0,
+                        delivery_radius_km  NUMERIC(5,2)    DEFAULT 5.0,
+                        avg_rating          NUMERIC(3,2)    DEFAULT 0.0,
+                        total_reviews       INTEGER         DEFAULT 0,
+                        logo_url            VARCHAR(500),
+                        banner_url          VARCHAR(500),
+
+                        created_at      TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+                        updated_at      TIMESTAMPTZ         NOT NULL DEFAULT NOW()
+);
+
+-- Index for owner lookups (seller dashboard: "show my stores")
+CREATE INDEX idx_stores_owner ON stores(owner_id);
+-- Index for category browsing
+CREATE INDEX idx_stores_category ON stores(category_id);
+-- Spatial index for PostGIS nearby query
+CREATE INDEX idx_stores_location_gist
+    ON stores USING GIST (location)
+    WHERE status = 'ACTIVE';
+-- WHY partial index: only ACTIVE stores appear in nearby search.
+-- Suspended/closed stores don't need to be indexed.
+-- Smaller index = faster query.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PRODUCTS
+-- Items sold by stores. Soft-deleted (active=false).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE products (
+                          id              BIGSERIAL       PRIMARY KEY,
+                          store_id        BIGINT          NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+                          category_id     BIGINT          REFERENCES categories(id),
+                          name            VARCHAR(300)    NOT NULL,
+                          description     VARCHAR(2000),
+                          sku             VARCHAR(100),   -- stock keeping unit (optional, seller-defined)
+                          price           NUMERIC(12,2)   NOT NULL,
+    -- NUMERIC(12,2): up to ₹9,999,999,999.99. Exact decimal.
+    -- NEVER use FLOAT for price. 79.99 in float = 79.98999999999...
+                          compare_at_price    NUMERIC(12,2),
+    -- compare_at_price: "Was ₹200, Now ₹150" — the strikethrough price
+                          unit            VARCHAR(50)     DEFAULT 'piece',
+    -- "500g", "1kg", "1L", "piece", "dozen"
+                          active          BOOLEAN         NOT NULL DEFAULT TRUE,
+    -- WHY soft delete: order history references product.
+    -- Hard delete breaks historical orders that reference deleted products.
+                          avg_rating      NUMERIC(3,2)    DEFAULT 0.0,
+                          total_reviews   INTEGER         DEFAULT 0,
+                          image_urls      TEXT[],
+    -- TEXT[]: PostgreSQL array. Stores multiple image URLs in one column.
+    -- Alternative: separate product_images table. Array is simpler for ≤5 images.
+                          created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+                          updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_products_store    ON products(store_id);
+CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_active   ON products(store_id, active);
+-- Composite index: "active products in store X" — common query, needs both fields.
+-- Index (store_id, active) handles: WHERE store_id = 10 AND active = true
+
+-- Full-text search index
+CREATE INDEX idx_products_fts ON products
+    USING GIN (to_tsvector('english', name || ' ' || COALESCE(description, '')));
+-- GIN index on text-search vector. Enables:
+-- WHERE to_tsvector('english', name) @@ to_tsquery('rice') → fast FTS
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- INVENTORY
+-- One row per product. Tracks available quantity.
+-- Separate from products: inventory changes frequently. Product info rarely.
+-- Splitting reduces lock contention: updating inventory doesn't lock product row.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE inventory (
+                           id                  BIGSERIAL   PRIMARY KEY,
+                           product_id          BIGINT      NOT NULL UNIQUE REFERENCES products(id) ON DELETE CASCADE,
+    -- UNIQUE: one inventory record per product
+                           quantity            INTEGER     NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    -- CHECK quantity >= 0: database rejects any UPDATE that would set negative stock.
+    -- Even if application code has a bug: the database is the last line of defence.
+                           low_stock_threshold INTEGER     NOT NULL DEFAULT 10,
+    -- When quantity drops below this: send low-stock alert to seller
+                           version             INTEGER     NOT NULL DEFAULT 0,
+    -- Optimistic lock version. @Version in JPA.
+    -- WHY: for non-time-critical updates. If two updates conflict:
+    -- one succeeds, the other gets OptimisticLockingFailureException.
+    -- The failing request retries. No DB-level locking required.
+    -- CONTRAST with pessimistic lock (SELECT FOR UPDATE) in Phase 7.
+                           updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- WISHLISTS
+-- Users can save products to buy later.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE wishlist_items (
+                                id          BIGSERIAL   PRIMARY KEY,
+                                user_id     BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                                product_id  BIGINT      NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                UNIQUE (user_id, product_id)
+    -- Composite UNIQUE: user cannot wishlist same product twice.
+    -- Idempotent: adding again is safe, DB rejects the duplicate.
+);
