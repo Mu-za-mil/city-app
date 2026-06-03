@@ -615,3 +615,46 @@ CREATE TABLE outbox_events (
 CREATE INDEX idx_outbox_pending
     ON outbox_events(status, next_retry_at)
     WHERE status = 'PENDING';
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PostGIS TRIGGERS
+-- Auto-populate GEOGRAPHY columns from lat/lng
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Enable PostGIS
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- Trigger function for stores
+CREATE OR REPLACE FUNCTION sync_store_location()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.latitude IS NOT NULL AND NEW.longitude IS NOT NULL THEN
+        NEW.location := ST_SetSRID(
+            ST_MakePoint(NEW.longitude, NEW.latitude), 4326
+        )::GEOGRAPHY;
+END IF;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_store_location
+    BEFORE INSERT OR UPDATE OF latitude, longitude ON stores
+    FOR EACH ROW EXECUTE FUNCTION sync_store_location();
+
+-- Trigger function for delivery partners
+CREATE OR REPLACE FUNCTION sync_partner_location()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.current_latitude IS NOT NULL AND NEW.current_longitude IS NOT NULL THEN
+        NEW.current_location := ST_SetSRID(
+            ST_MakePoint(NEW.current_longitude, NEW.current_latitude), 4326
+        )::GEOGRAPHY;
+END IF;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_partner_location
+    BEFORE INSERT OR UPDATE OF current_latitude, current_longitude
+                     ON delivery_partners
+                         FOR EACH ROW EXECUTE FUNCTION sync_partner_location();
