@@ -528,3 +528,63 @@ CREATE TABLE delivery_assignments (
 );
 
 CREATE INDEX idx_delivery_assignments_partner ON delivery_assignments(partner_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- STORE FOLLOWS
+-- Buyers can follow stores to get announcements.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE store_follows (
+                               id          BIGSERIAL   PRIMARY KEY,
+                               user_id     BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                               store_id    BIGINT      NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+                               created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                               UNIQUE (user_id, store_id)
+    -- Idempotent follow: following twice just returns the existing follow.
+);
+
+CREATE INDEX idx_store_follows_store ON store_follows(store_id);
+-- Used for announcement fan-out: "get all follower userIds for store X"
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ANNOUNCEMENTS
+-- Sellers broadcast messages to their followers.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE announcements (
+                               id          BIGSERIAL       PRIMARY KEY,
+                               store_id    BIGINT          NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+                               title       VARCHAR(200)    NOT NULL,
+                               message     VARCHAR(2000)   NOT NULL,
+                               created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_announcements_store ON announcements(store_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ADS
+-- Stores can pay to promote their products.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE ads (
+                     id          BIGSERIAL       PRIMARY KEY,
+                     store_id    BIGINT          NOT NULL REFERENCES stores(id),
+                     product_id  BIGINT          REFERENCES products(id),
+                     title       VARCHAR(200)    NOT NULL,
+                     image_url   VARCHAR(500),
+                     target_url  VARCHAR(500),
+                     ad_type     VARCHAR(30)     NOT NULL CHECK (ad_type IN ('BANNER', 'SPONSORED_PRODUCT', 'POPUP')),
+                     status      VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE'
+                         CHECK (status IN ('ACTIVE', 'PAUSED', 'EXPIRED')),
+                     starts_at   TIMESTAMPTZ     NOT NULL,
+                     ends_at     TIMESTAMPTZ     NOT NULL,
+                     budget      NUMERIC(12,2),
+                     impressions INTEGER         NOT NULL DEFAULT 0,
+                     clicks      INTEGER         NOT NULL DEFAULT 0,
+                     created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_ads_active_dates
+    ON ads(status, ends_at)
+    WHERE status = 'ACTIVE';
+-- For the ad expiry scheduler: "find active ads that have expired"
