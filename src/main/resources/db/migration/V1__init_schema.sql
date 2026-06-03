@@ -414,3 +414,68 @@ CREATE TABLE invoices (
                           tax             NUMERIC(12,2)   NOT NULL DEFAULT 0,
                           generated_at    TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- NOTIFICATIONS
+-- Persistent in-app notification history.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE notifications (
+                               id              BIGSERIAL       PRIMARY KEY,
+                               user_id         BIGINT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                               type            VARCHAR(50)     NOT NULL,   -- ORDER_UPDATE, LOW_STOCK, etc.
+                               title           VARCHAR(200)    NOT NULL,
+                               body            VARCHAR(1000)   NOT NULL,
+                               reference_id    BIGINT,         -- the orderId or productId this refers to
+                               reference_type  VARCHAR(50),    -- 'ORDER', 'PRODUCT', 'DELIVERY'
+                               read_at         TIMESTAMPTZ,    -- null = unread. Set when user reads it.
+                               created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_notifications_user_unread
+    ON notifications(user_id, created_at DESC)
+    WHERE read_at IS NULL;
+-- Partial index for unread notifications only.
+-- The most common query: "show user's unread notifications, newest first"
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- DEVICE TOKENS (FCM Push Notification tokens)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE device_tokens (
+                               id          BIGSERIAL   PRIMARY KEY,
+                               user_id     BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                               token       VARCHAR(500) NOT NULL UNIQUE,
+                               platform    VARCHAR(10)  NOT NULL CHECK (platform IN ('IOS', 'ANDROID', 'WEB')),
+                               active      BOOLEAN      NOT NULL DEFAULT TRUE,
+                               created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_device_tokens_user_active
+    ON device_tokens(user_id)
+    WHERE active = TRUE;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- REVIEWS
+-- Verified purchase reviews for products and stores.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE reviews (
+                         id          BIGSERIAL       PRIMARY KEY,
+                         reviewer_id BIGINT          NOT NULL REFERENCES users(id),
+                         order_id    BIGINT          NOT NULL REFERENCES orders(id),
+                         target_type VARCHAR(20)     NOT NULL CHECK (target_type IN ('PRODUCT', 'STORE')),
+                         target_id   BIGINT          NOT NULL,
+                         rating      INTEGER         NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    -- INTEGER not SMALLINT: entity field is Integer (4 bytes).
+    -- SMALLINT (2 bytes) causes Hibernate type mismatch.
+    -- THIS IS THE BUG WE FOUND. Integer here prevents it.
+                         comment     VARCHAR(2000),
+                         created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    -- Prevent duplicate reviews: one review per product per order
+                         UNIQUE (reviewer_id, order_id, target_type, target_id)
+);
+
+CREATE INDEX idx_reviews_target ON reviews(target_type, target_id);
+-- Used when displaying reviews: "show all reviews for product 42"
