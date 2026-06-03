@@ -5,7 +5,7 @@ spring:
 
   # ── DATABASE ────────────────────────────────────────────────────────────
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cityapp}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/cityapp}
     username: ${DB_USERNAME:cityapp}
     password: ${DB_PASSWORD:cityapp_password}
     hikari:
