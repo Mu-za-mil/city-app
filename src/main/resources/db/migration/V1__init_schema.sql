@@ -309,3 +309,108 @@ CREATE TABLE wishlist_items (
     -- Composite UNIQUE: user cannot wishlist same product twice.
     -- Idempotent: adding again is safe, DB rejects the duplicate.
 );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ORDERS
+-- The central commerce entity. Immutable once placed.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE orders (
+                        id                  BIGSERIAL       PRIMARY KEY,
+                        user_id             BIGINT          NOT NULL REFERENCES users(id),
+                        store_id            BIGINT          NOT NULL REFERENCES stores(id),
+                        idempotency_key     VARCHAR(200)    UNIQUE,
+    -- UNIQUE: same idempotency key = same order. Client can retry safely.
+    -- If network fails after order creation but before response:
+    -- client retries with same key → gets back the original order, not a duplicate.
+                        status              VARCHAR(30)     NOT NULL DEFAULT 'CREATED'
+                            CHECK (status IN (
+                                              'CREATED', 'CONFIRMED', 'PREPARING',
+                                              'READY', 'OUT_FOR_DELIVERY', 'DELIVERED',
+                                              'PICKED_UP', 'CANCELLED'
+                                )),
+                        order_type          VARCHAR(20)     NOT NULL CHECK (order_type IN ('DELIVERY', 'TAKEAWAY')),
+                        total_amount        NUMERIC(12,2)   NOT NULL CHECK (total_amount > 0),
+    -- CHECK total_amount > 0: prevents ₹0 orders from a UI bug
+                        delivery_address    VARCHAR(500),
+                        delivery_lat        DOUBLE PRECISION,
+                        delivery_lng        DOUBLE PRECISION,
+                        cancellation_reason VARCHAR(500),
+                        saga_id             VARCHAR(200),
+    -- saga_id: correlation ID for the distributed transaction (Phase 10)
+                        notes               VARCHAR(500),
+                        created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+                        updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+-- Composite index: seller's dashboard query "show me orders for my store"
+CREATE INDEX idx_orders_store_status ON orders(store_id, status);
+-- Buyer's order history: "show me my orders"
+CREATE INDEX idx_orders_user ON orders(user_id);
+-- Saga timeout detection: "find CREATED orders older than 2 minutes"
+CREATE INDEX idx_orders_status_created ON orders(status, created_at)
+    WHERE status = 'CREATED';
+-- WHY partial index: only CREATED orders are queried by the timeout handler.
+-- DELIVERED/CANCELLED orders don't need this index.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ORDER ITEMS
+-- Individual line items within an order.
+-- Snapshot of product data at order time.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE order_items (
+                             id              BIGSERIAL       PRIMARY KEY,
+                             order_id        BIGINT          NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                             product_id      BIGINT          NOT NULL REFERENCES products(id),
+                             product_name    VARCHAR(300)    NOT NULL,
+    -- WHY snapshot product_name: if seller renames the product later,
+    -- the order history should show the name at time of purchase.
+    -- Without snapshot: the order shows the current name, not the ordered name.
+                             unit_price      NUMERIC(12,2)   NOT NULL,
+                             quantity        INTEGER         NOT NULL CHECK (quantity > 0),
+                             subtotal        NUMERIC(12,2)   NOT NULL
+    -- subtotal = unit_price * quantity (redundant but prevents recalculation bugs)
+);
+
+CREATE INDEX idx_order_items_order   ON order_items(order_id);
+CREATE INDEX idx_order_items_product ON order_items(product_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PAYMENTS
+-- One payment record per order attempt.
+-- Multiple records if buyer retries after failure.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE payments (
+                          id                  BIGSERIAL       PRIMARY KEY,
+                          order_id            BIGINT          NOT NULL REFERENCES orders(id),
+                          amount              NUMERIC(12,2)   NOT NULL,
+                          currency            VARCHAR(3)      NOT NULL DEFAULT 'INR',
+                          method              VARCHAR(30)     NOT NULL CHECK (method IN ('COD', 'RAZORPAY', 'UPI')),
+                          status              VARCHAR(20)     NOT NULL DEFAULT 'PENDING'
+                              CHECK (status IN ('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED')),
+                          gateway_order_id    VARCHAR(200),   -- Razorpay's order ID
+                          gateway_payment_id  VARCHAR(200),   -- Razorpay's payment ID (after payment)
+                          gateway_signature   VARCHAR(500),   -- For webhook verification
+                          paid_at             TIMESTAMPTZ,
+                          created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_payments_order            ON payments(order_id);
+CREATE INDEX idx_payments_gateway_order_id ON payments(gateway_order_id);
+-- Index on gateway_order_id: webhook handler looks up payment by Razorpay's ID.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- INVOICES
+-- Generated after successful payment.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE invoices (
+                          id              BIGSERIAL       PRIMARY KEY,
+                          order_id        BIGINT          NOT NULL UNIQUE REFERENCES orders(id),
+                          invoice_number  VARCHAR(100)    NOT NULL UNIQUE,
+                          amount          NUMERIC(12,2)   NOT NULL,
+                          tax             NUMERIC(12,2)   NOT NULL DEFAULT 0,
+                          generated_at    TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
