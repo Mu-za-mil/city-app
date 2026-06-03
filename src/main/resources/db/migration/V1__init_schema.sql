@@ -479,3 +479,52 @@ CREATE TABLE reviews (
 
 CREATE INDEX idx_reviews_target ON reviews(target_type, target_id);
 -- Used when displaying reviews: "show all reviews for product 42"
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- DELIVERY PARTNERS
+-- Users with role=DELIVERY_PARTNER have a corresponding record here.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE delivery_partners (
+                                   id                  BIGSERIAL       PRIMARY KEY,
+                                   user_id             BIGINT          NOT NULL UNIQUE REFERENCES users(id),
+    -- UNIQUE: one partner profile per user
+                                   vehicle_type        VARCHAR(30)     CHECK (vehicle_type IN ('BICYCLE', 'MOTORCYCLE', 'CAR', 'VAN')),
+                                   vehicle_number      VARCHAR(20),
+                                   license_number      VARCHAR(50),
+                                   status              VARCHAR(20)     NOT NULL DEFAULT 'PENDING'
+                                       CHECK (status IN ('PENDING', 'APPROVED', 'ACTIVE', 'INACTIVE', 'SUSPENDED')),
+                                   current_latitude    DOUBLE PRECISION,
+                                   current_longitude   DOUBLE PRECISION,
+                                   current_location    GEOGRAPHY(POINT, 4326),
+    -- PostGIS spatial column for fast nearby partner queries
+                                   total_deliveries    INTEGER         NOT NULL DEFAULT 0,
+                                   avg_rating          NUMERIC(3,2)    DEFAULT 0.0,
+                                   created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+                                   updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_delivery_partners_available_location
+    ON delivery_partners USING GIST (current_location)
+    WHERE status = 'ACTIVE';
+-- Only index ACTIVE partners: dispatcher never assigns to inactive partners.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- DELIVERY ASSIGNMENTS
+-- Links orders to delivery partners.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE delivery_assignments (
+                                      id              BIGSERIAL   PRIMARY KEY,
+                                      order_id        BIGINT      NOT NULL UNIQUE REFERENCES orders(id),
+    -- UNIQUE: one assignment per order
+                                      partner_id      BIGINT      NOT NULL REFERENCES delivery_partners(id),
+                                      status          VARCHAR(20) NOT NULL DEFAULT 'ASSIGNED'
+                                          CHECK (status IN ('ASSIGNED', 'PICKED_UP', 'DELIVERED', 'CANCELLED')),
+                                      assigned_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                      picked_up_at    TIMESTAMPTZ,
+                                      delivered_at    TIMESTAMPTZ,
+                                      delivery_proof_url VARCHAR(500)   -- photo of delivered package
+);
+
+CREATE INDEX idx_delivery_assignments_partner ON delivery_assignments(partner_id);
