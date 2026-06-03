@@ -588,3 +588,30 @@ CREATE INDEX idx_ads_active_dates
     ON ads(status, ends_at)
     WHERE status = 'ACTIVE';
 -- For the ad expiry scheduler: "find active ads that have expired"
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- OUTBOX EVENTS (Transactional Outbox Pattern)
+-- Adding now: cheaper than ALTER TABLE later.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE outbox_events (
+                               id              BIGSERIAL       PRIMARY KEY,
+                               aggregate_type  VARCHAR(100)    NOT NULL,
+                               aggregate_id    VARCHAR(100)    NOT NULL,
+                               topic           VARCHAR(200)    NOT NULL,
+                               partition_key   VARCHAR(200),
+                               event_type      VARCHAR(200)    NOT NULL,
+                               payload         TEXT            NOT NULL,
+                               status          VARCHAR(20)     NOT NULL DEFAULT 'PENDING'
+                                   CHECK (status IN ('PENDING', 'PUBLISHED', 'FAILED')),
+                               retry_count     INTEGER         NOT NULL DEFAULT 0,
+                               max_retries     INTEGER         NOT NULL DEFAULT 3,
+                               last_error      TEXT,
+                               created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+                               published_at    TIMESTAMPTZ,
+                               next_retry_at   TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_outbox_pending
+    ON outbox_events(status, next_retry_at)
+    WHERE status = 'PENDING';
