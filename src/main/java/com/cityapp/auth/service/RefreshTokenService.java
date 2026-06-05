@@ -24,7 +24,7 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
 
-    @Value("${app.jwt.refresh-expiration-days:30}")
+    @Value("${cityapp.jwt.refresh-expiration-days:30}")
     private long refreshExpirationDays;
 
     // ── Create ─────────────────────────────────────────────────────────────────
