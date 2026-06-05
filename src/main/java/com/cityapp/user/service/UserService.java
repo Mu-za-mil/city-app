@@ -1,14 +1,16 @@
 package com.cityapp.user.service;
 
+import com.cityapp.auth.entity.RefreshToken;
+import com.cityapp.auth.service.RefreshTokenService;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
-import com.cityapp.user.dto.RegisterRequest;
-import com.cityapp.user.dto.UpdateProfileRequest;
-import com.cityapp.user.dto.UserResponse;
+import com.cityapp.security.service.JwtService;
+import com.cityapp.user.dto.*;
 import com.cityapp.user.entity.Role;
 import com.cityapp.user.entity.User;
 import com.cityapp.user.mapper.UserMapper;
 import com.cityapp.user.repository.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -65,6 +67,8 @@ public class UserService implements UserDetailsService {
     private final UserRepository  userRepository;
     private final UserMapper      userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
     // PasswordEncoder is a Spring Security bean defined in SecurityConfig (Phase 4).
     // We declare the dependency here. Spring will inject it.
     // This creates a chicken-and-egg situation: UserService needs SecurityConfig.
@@ -112,6 +116,103 @@ public class UserService implements UserDetailsService {
                 saved.getId(), saved.getEmail(), saved.getRole());
 
         return userMapper.toResponse(saved);
+    }
+
+    // ── Login ─────────────────────────────────────────────────────────────────
+
+    @Transactional
+    public AuthResponse login(LoginRequest req, HttpServletRequest httpRequest) {
+
+        // Step 1: Find user by email
+        User user = userRepository.findByEmail(req.getEmail())
+                .orElseThrow(() -> AppException.unauthorized(
+                        "Invalid email or password"));
+        // WHY same message for wrong email AND wrong password:
+        // "Email not found" tells attacker which emails are registered.
+        // "Invalid email or password" reveals nothing.
+        // This is user enumeration protection.
+
+        // Step 2: Check if account is enabled and not locked
+        if (!user.isEnabled()) {
+            throw AppException.unauthorized("Account has been suspended. Contact support.");
+        }
+        if (!user.isAccountNonLocked()) {
+            throw AppException.unauthorized("Account is locked. Contact support.");
+        }
+
+        // Step 3: Verify password
+        if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
+            throw AppException.unauthorized("Invalid email or password");
+            // SAME message as "email not found" — no information leakage
+        }
+
+        // Step 4: Generate access token (short-lived JWT)
+        String accessToken = jwtService.generateAccessToken(user);
+
+        // Step 5: Create refresh token (long-lived, stored in DB)
+        String deviceInfo = extractDeviceInfo(httpRequest);
+        String ipAddress  = extractClientIp(httpRequest);
+        String userAgent  = httpRequest.getHeader("User-Agent");
+
+        RefreshToken refreshToken = refreshTokenService
+                .createRefreshToken(user, deviceInfo, ipAddress, userAgent);
+
+        log.info("User logged in: id={} email={} device={}",
+                user.getId(), user.getEmail(), deviceInfo);
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken.getToken())
+                .accessTokenExpiresIn(900L)   // 15 minutes in seconds
+                .userId(user.getId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .role(user.getRole())
+                .build();
+    }
+
+// ── Refresh Token Exchange ─────────────────────────────────────────────────
+
+    @Transactional
+    public AuthResponse refreshTokens(String refreshTokenValue) {
+        // Rotate the refresh token (old → new)
+        RefreshToken newRefreshToken = refreshTokenService.rotate(refreshTokenValue);
+
+        // Generate new access token for the user
+        String newAccessToken = jwtService.generateAccessToken(newRefreshToken.getUser());
+
+        return AuthResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken.getToken())
+                .accessTokenExpiresIn(900L)
+                .userId(newRefreshToken.getUser().getId())
+                .name(newRefreshToken.getUser().getName())
+                .email(newRefreshToken.getUser().getEmail())
+                .role(newRefreshToken.getUser().getRole())
+                .build();
+    }
+
+// ── Logout ─────────────────────────────────────────────────────────────────
+
+    public void logout(String accessToken, String refreshTokenValue) {
+        // Blacklist the access token in Redis (prevents reuse before expiry)
+        if (accessToken != null && accessToken.startsWith("Bearer ")) {
+            jwtService.blacklist(accessToken.substring(7));
+        }
+        // Revoke the refresh token in DB
+        if (refreshTokenValue != null && !refreshTokenValue.isBlank()) {
+            refreshTokenService.revokeToken(refreshTokenValue);
+        }
+    }
+
+    public void logoutAll(Long userId, String accessToken) {
+        // Blacklist current access token
+        if (accessToken != null && accessToken.startsWith("Bearer ")) {
+            jwtService.blacklist(accessToken.substring(7));
+        }
+        // Revoke ALL refresh tokens for this user
+        int revoked = refreshTokenService.revokeAllForUser(userId);
+        log.info("User {} logged out from {} devices", userId, revoked);
     }
 
     // ── Profile Operations ────────────────────────────────────────────────────
@@ -200,5 +301,44 @@ public class UserService implements UserDetailsService {
     private User findUserById(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> AppException.notFound("User not found: " + userId));
+    }
+
+    private String extractDeviceInfo(HttpServletRequest request) {
+        String ua = request.getHeader("User-Agent");
+        if (ua == null) return "Unknown Device";
+        if (ua.contains("iPhone")) return "iPhone";
+        if (ua.contains("Android")) return "Android";
+        if (ua.contains("iPad")) return "iPad";
+        if (ua.contains("Windows")) return "Windows PC";
+        if (ua.contains("Macintosh")) return "Mac";
+        return "Browser";
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        // Only trust X-Forwarded-For from private/loopback IPs (our load balancer)
+        // Public IPs sending XFF = spoofing attempt
+        String remoteAddr = request.getRemoteAddr();
+        if (isPrivateOrLoopback(remoteAddr)) {
+            String xff = request.getHeader("X-Forwarded-For");
+            if (xff != null && !xff.isBlank()) {
+                // Take the rightmost non-private IP (the real client)
+                String[] ips = xff.split(",");
+                for (int i = ips.length - 1; i >= 0; i--) {
+                    String ip = ips[i].trim();
+                    if (!isPrivateOrLoopback(ip)) return ip;
+                }
+                return ips[0].trim();
+            }
+        }
+        return remoteAddr;
+    }
+
+    private boolean isPrivateOrLoopback(String ip) {
+        return ip != null && (
+                ip.startsWith("127.") || ip.startsWith("10.") ||
+                        ip.startsWith("172.1") || ip.startsWith("172.2") ||
+                        ip.startsWith("172.3") || ip.startsWith("192.168.") ||
+                        ip.equals("::1") || ip.equals("0:0:0:0:0:0:0:1")
+        );
     }
 }
