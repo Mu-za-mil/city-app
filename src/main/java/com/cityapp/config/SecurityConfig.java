@@ -1,6 +1,7 @@
 package com.cityapp.config;
 
 import com.cityapp.security.filter.JwtAuthFilter;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -113,6 +114,22 @@ public class SecurityConfig {
                         // Catch-all: any endpoint not listed above requires authentication.
                         // If you miss securing a new endpoint: it defaults to requiring auth.
                         // Fail-secure: undeclared = protected.
+                )
+
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(
+                                (request, response, authException) -> {
+                                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                                    response.setContentType("application/json");
+                                    response.getWriter().write("""
+                        {
+                            "success": false,
+                            "errorCode": "UNAUTHORIZED",
+                            "message": "Authentication required"
+                        }
+                        """);
+                                }
+                        )
                 )
 
                 // ── Authentication Provider ────────────────────────────────────────
