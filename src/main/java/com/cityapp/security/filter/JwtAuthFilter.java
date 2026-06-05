@@ -1,7 +1,6 @@
 package com.cityapp.security.filter;
 
 import com.cityapp.security.service.JwtService;
-import com.cityapp.user.service.UserService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -51,7 +51,7 @@ import java.io.IOException;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserService userService;
+    private final UserDetailsService userDetailsService;
 
     @Override
     protected void doFilterInternal(
@@ -111,7 +111,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             //   Cost: 1 DB query per authenticated request.
             //   With HikariCP connection pool: typically <1ms.
             //   This cost is worth the security guarantee.
-            var userDetails = userService.loadUserByUsername(username);
+            var userDetails = userDetailsService.loadUserByUsername(username);
 
             // Step 6: Validate the token
             if (jwtService.isValid(token, userDetails)) {

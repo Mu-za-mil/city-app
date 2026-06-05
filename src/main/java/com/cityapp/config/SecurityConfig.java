@@ -32,15 +32,10 @@ public class SecurityConfig {
 
     private final JwtAuthFilter  jwtAuthFilter;
     private final com.cityapp.user.service.UserService userService;
+    private final PasswordEncoder passwordEncoder;
 
-    // ── Password Encoder ──────────────────────────────────────────────────────
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12);
-        // Cost 12: ~250ms per hash. Slow = secure against brute force.
-        // Use BCryptPasswordEncoder(4) in tests: 4ms per hash.
-    }
+
 
     // ── Authentication Provider ────────────────────────────────────────────────
 
@@ -49,7 +44,7 @@ public class SecurityConfig {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(userService);
         // Tells Spring Security: load users from our UserService.loadUserByUsername()
-        provider.setPasswordEncoder(passwordEncoder());
+        provider.setPasswordEncoder(passwordEncoder);
         // Tells Spring Security: compare passwords using BCrypt.
         return provider;
     }
