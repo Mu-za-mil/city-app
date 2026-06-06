@@ -96,4 +96,33 @@ public class StoreController {
                 "Store status toggled"));
     }
 
+    // ── Admin endpoints ────────────────────────────────────────────────────────
+
+    @PostMapping("/{storeId}/approve")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<ApiResponse<StoreResponse>> approve(
+            @PathVariable Long storeId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                storeService.approveStore(storeId),
+                "Store approved and is now live"));
+    }
+
+    @PostMapping("/{storeId}/suspend")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<ApiResponse<StoreResponse>> suspend(
+            @PathVariable Long storeId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                storeService.suspendStore(storeId)));
+    }
+
+    @GetMapping("/pending-approvals")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<ApiResponse<PageResponse<StoreResponse>>> pendingApprovals(
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                storeService.getPendingApprovals(
+                        PageRequest.of(page, size,
+                                Sort.by("createdAt").ascending()))));
+    }
 }

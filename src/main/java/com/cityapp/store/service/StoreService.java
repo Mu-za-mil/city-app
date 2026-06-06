@@ -14,9 +14,11 @@ import com.cityapp.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 
@@ -170,4 +172,100 @@ public class StoreService {
         return storeMapper.toResponse(saved);
     }
 
+
+    // ── Admin Operations ──────────────────────────────────────────────────────
+
+    @Transactional
+    public StoreResponse approveStore(Long storeId) {
+        Store store = findStoreOrThrow(storeId);
+
+        if (store.getStatus() == StoreStatus.ACTIVE) {
+            throw AppException.conflict("Store is already approved");
+        }
+
+        store.setStatus(StoreStatus.ACTIVE);
+        log.info("Store approved: id={} name='{}'", storeId, store.getName());
+        return storeMapper.toResponse(storeRepository.save(store));
+    }
+
+    @Transactional
+    public StoreResponse suspendStore(Long storeId) {
+        Store store = findStoreOrThrow(storeId);
+        store.setStatus(StoreStatus.SUSPENDED);
+        store.setOpen(false);   // close it too — suspended stores don't accept orders
+        log.info("Store suspended: id={}", storeId);
+        return storeMapper.toResponse(storeRepository.save(store));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<StoreResponse> getPendingApprovals(Pageable pageable) {
+        return PageResponse.from(
+                storeRepository.findByStatusOrderByCreatedAtAsc(
+                                StoreStatus.PENDING_APPROVAL, pageable)
+                        .map(storeMapper::toResponse));
+    }
+
+    // ── Scheduled: Auto Open/Close Based on Operating Hours ──────────────────
+
+    /**
+     * Runs every 5 minutes. Automatically opens/closes stores based on configured hours.
+     *
+     * WHY @Scheduled INSTEAD OF ON-DEMAND CHECK:
+     *   Option A: Check operating hours on every API request.
+     *     Pro: always accurate to the second.
+     *     Con: every store fetch computes LocalTime.now(IST).
+     *          1000 concurrent requests = 1000 time comparisons.
+     *          Complexity in every query.
+     *
+     *   Option B: Scheduled job updates open flag periodically.
+     *     Pro: store.open is a simple boolean. Any query reads it.
+     *     Pro: sellers can manually override (close early, open for special event).
+     *     Con: up to 5-minute delay between scheduled hours and actual open/close.
+     *     Con: consumes scheduler thread every 5 minutes.
+     *
+     *   OUR CHOICE: Option B.
+     *   The 5-minute delay is acceptable for operating hours.
+     *   Sellers can manually toggle via toggleOpenStatus() for immediate effect.
+     *   Manual override persists until the next scheduled run.
+     */
+    @Scheduled(fixedDelay = 300_000) // Every 5 minutes
+    @Transactional
+    public void autoToggleStoreHours() {
+        LocalTime nowIST = LocalTime.now(IST);
+
+        // Fetch only ACTIVE stores with configured hours
+        // (PENDING/SUSPENDED stores should not be auto-opened)
+        storeRepository.findByStatusOrderByCreatedAtAsc(
+                        StoreStatus.ACTIVE, Pageable.unpaged())
+                .forEach(store -> {
+                    if (store.getOpeningTime() == null) return;
+                    boolean shouldBeOpen = isWithinHours(store, nowIST);
+                    if (store.isOpen() != shouldBeOpen) {
+                        store.setOpen(shouldBeOpen);
+                        storeRepository.save(store);
+                        log.debug("Auto-toggled store {}: open={}",
+                                store.getId(), shouldBeOpen);
+                    }
+                });
+    }
+
+    private boolean isWithinHours(Store store, LocalTime now) {
+        LocalTime open  = store.getOpeningTime();
+        LocalTime close = store.getClosingTime();
+        if (open == null || close == null) return false;
+
+        if (open.isBefore(close)) {
+            return now.isAfter(open) && now.isBefore(close);
+        } else {
+            // Overnight: e.g. 22:00 → 02:00
+            return now.isAfter(open) || now.isBefore(close);
+        }
+    }
+
+    // ── Private ────────────────────────────────────────────────────────────────
+
+    private Store findStoreOrThrow(Long storeId) {
+        return storeRepository.findById(storeId)
+                .orElseThrow(() -> AppException.notFound("Store not found: " + storeId));
+    }
 }
