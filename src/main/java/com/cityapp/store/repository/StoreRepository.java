@@ -78,18 +78,20 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
      *   HAVING runs after SELECT (distance is now available).
      */
     @Query(value = """
-        SELECT *,
-               (6371 * acos(
-                   cos(radians(:lat)) * cos(radians(latitude))
-                   * cos(radians(longitude) - radians(:lng))
-                   + sin(radians(:lat)) * sin(radians(latitude))
-               )) AS distance_km
-        FROM stores
-        WHERE status = 'ACTIVE'
-          AND open = true
-          AND latitude IS NOT NULL
-          AND longitude IS NOT NULL
-        HAVING distance_km <= :radiusKm
+            SELECT * FROM (
+            SELECT *,
+                (6371 * acos(
+                    cos(radians(:lat)) * cos(radians(latitude))
+                    * cos(radians(longitude) - radians(:lng))
+                    + sin(radians(:lat)) * sin(radians(latitude))
+                )) AS distance_km
+            FROM stores
+            WHERE status = 'ACTIVE'
+                AND open = true
+                AND latitude IS NOT NULL
+                AND longitude IS NOT NULL
+        ) AS subquery
+        WHERE distance_km <= :radiusKm
         ORDER BY distance_km ASC
         LIMIT :limit
         """, nativeQuery = true)
