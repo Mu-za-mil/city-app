@@ -23,6 +23,34 @@ public class ProductController {
 
     private final ProductService productService;
 
+    // ── Public endpoints ──────────────────────────────────────────────────────
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> search(
+            @RequestParam(required = false) Long       storeId,
+            @RequestParam(required = false) String     q,
+            @RequestParam(required = false) Long       categoryId,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(defaultValue = "0")    int  page,
+            @RequestParam(defaultValue = "20")   int  size,
+            @RequestParam(defaultValue = "name") String sort) {
+
+        // Build sort from query param
+        Sort sortObj = switch (sort) {
+            case "price_asc"    -> Sort.by("price").ascending();
+            case "price_desc"   -> Sort.by("price").descending();
+            case "rating"       -> Sort.by("avgRating").descending();
+            case "newest"       -> Sort.by("createdAt").descending();
+            default             -> Sort.by("name").ascending();
+        };
+        Pageable pageable = PageRequest.of(page, size, sortObj);
+
+        return ResponseEntity.ok(ApiResponse.ok(
+                productService.searchProducts(
+                        storeId, q, categoryId, minPrice, maxPrice, pageable)));
+    }
+
     // ── Seller endpoints ──────────────────────────────────────────────────────
 
     @PostMapping
