@@ -3,6 +3,7 @@ package com.cityapp.product.spec;
 import com.cityapp.product.entity.Product;
 import jakarta.persistence.criteria.*;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.lang.Nullable;
 
 import java.math.BigDecimal;
 
@@ -59,9 +60,12 @@ public class ProductSpecification {
     /**
      * Filter by store.
      * Used for: "show all products in store X".
+     * Returns a no-op specification (cb.conjunction()) when storeId is null.
      */
-    public static Specification<Product> inStore(Long storeId) {
-        if (storeId == null) return Specification.allOf((Iterable<Specification<Product>>) null);
+    public static Specification<Product> inStore(@Nullable Long storeId) {
+        if (storeId == null) {
+            return (root, query, cb) -> cb.conjunction(); // Always true condition
+        }
         return (root, query, cb) ->
                 cb.equal(root.get("store").get("id"), storeId);
     }
@@ -69,6 +73,7 @@ public class ProductSpecification {
     /**
      * Keyword search across name AND description.
      * Case-insensitive LIKE search.
+     * Returns a no-op specification (cb.conjunction()) when keyword is null or blank.
      *
      * LOWER(name) LIKE LOWER('%rice%')
      *
@@ -78,20 +83,25 @@ public class ProductSpecification {
      * For advanced FTS: use @Query with nativeQuery=true.
      * Phase 9 adds Elasticsearch for production-grade search.
      */
-    public static Specification<Product> withKeyword(String keyword) {
-        if (keyword == null || keyword.isBlank()) return Specification.allOf((Iterable<Specification<Product>>) null);
+    public static Specification<Product> withKeyword(@Nullable String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return (root, query, cb) -> cb.conjunction(); // Always true condition
+        }
         String pattern = "%" + keyword.toLowerCase() + "%";
         return (root, query, cb) -> cb.or(
-                cb.like(cb.lower(root.get("name")),        pattern),
+                cb.like(cb.lower(root.get("name")), pattern),
                 cb.like(cb.lower(root.get("description")), pattern)
         );
     }
 
     /**
      * Filter by category.
+     * Returns a no-op specification (cb.conjunction()) when categoryId is null.
      */
-    public static Specification<Product> inCategory(Long categoryId) {
-        if (categoryId == null) return Specification.allOf((Iterable<Specification<Product>>) null);
+    public static Specification<Product> inCategory(@Nullable Long categoryId) {
+        if (categoryId == null) {
+            return (root, query, cb) -> cb.conjunction(); // Always true condition
+        }
         return (root, query, cb) ->
                 cb.equal(root.get("category").get("id"), categoryId);
     }
@@ -99,11 +109,12 @@ public class ProductSpecification {
     /**
      * Price range filter.
      * minPrice and maxPrice are both optional — either can be null.
+     * Always returns a valid specification (never null).
      */
-    public static Specification<Product> priceBetween(
-            BigDecimal minPrice, BigDecimal maxPrice) {
+    public static Specification<Product> priceBetween(@Nullable BigDecimal minPrice,
+                                                      @Nullable BigDecimal maxPrice) {
         return (root, query, cb) -> {
-            Predicate predicate = cb.conjunction(); // starts as TRUE
+            Predicate predicate = cb.conjunction(); // starts as TRUE (1=1)
             if (minPrice != null) {
                 predicate = cb.and(predicate,
                         cb.greaterThanOrEqualTo(root.get("price"), minPrice));
@@ -119,13 +130,24 @@ public class ProductSpecification {
     /**
      * Filter by availability (has stock).
      * Joins to inventory table.
+     * Returns only products with at least one item in stock.
      */
     public static Specification<Product> hasStock() {
         return (root, query, cb) -> {
             // JOIN products p ON p.id = i.product_id
-            Join<Object, Object> inventory = root.join("inventory",
-                    JoinType.INNER);
+            Join<Object, Object> inventory = root.join("inventory", JoinType.INNER);
             return cb.greaterThan(inventory.get("quantity"), 0);
         };
+    }
+
+    /**
+     * Filter by product IDs (for batch operations).
+     * Returns a no-op specification when ids list is null or empty.
+     */
+    public static Specification<Product> idIn(@Nullable java.util.List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return (root, query, cb) -> cb.conjunction(); // Always true condition
+        }
+        return (root, query, cb) -> root.get("id").in(ids);
     }
 }

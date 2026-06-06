@@ -108,8 +108,8 @@ public class ProductService {
             BigDecimal maxPrice,
             Pageable   pageable) {
 
-        Specification<Product> spec = Specification
-                .allOf(ProductSpecification.isActive())
+        // Build specification using .and() chaining (all methods now return valid specs)
+        Specification<Product> spec = ProductSpecification.isActive()
                 .and(ProductSpecification.inStore(storeId))
                 .and(ProductSpecification.withKeyword(keyword))
                 .and(ProductSpecification.inCategory(categoryId))
@@ -123,18 +123,24 @@ public class ProductService {
         //   That's an N+1 query. Slow and wasteful.
         // FIX: fetch all inventory records for all products in ONE query
         List<Long> productIds = page.getContent()
-                .stream().map(Product::getId).toList();
+                .stream()
+                .map(Product::getId)
+                .toList();
 
         Map<Long, Integer> stockMap = inventoryRepository
                 .findByProductIdIn(productIds)
                 .stream()
                 .collect(Collectors.toMap(
                         inv -> inv.getProduct().getId(),
-                        Inventory::getQuantity));
+                        Inventory::getQuantity,
+                        (existing, replacement) -> existing // In case of duplicates
+                ));
 
         return PageResponse.from(page.map(product -> {
             ProductResponse resp = productMapper.toResponse(product);
             // Set stockQuantity from the batch-fetched map
+            int stockQuantity = stockMap.getOrDefault(product.getId(), 0);
+
             return ProductResponse.builder()
                     .id(resp.getId())
                     .storeId(resp.getStoreId())
@@ -149,11 +155,12 @@ public class ProductService {
                     .avgRating(resp.getAvgRating())
                     .totalReviews(resp.getTotalReviews())
                     .imageUrls(resp.getImageUrls())
-                    .stockQuantity(stockMap.getOrDefault(resp.getId(), 0))
+                    .stockQuantity(stockQuantity)
                     .createdAt(resp.getCreatedAt())
                     .build();
         }));
     }
+
 
     // ── Inventory Management ──────────────────────────────────────────────────
 
