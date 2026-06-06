@@ -64,5 +64,36 @@ public class StoreController {
                         "Store created and submitted for approval"));
     }
 
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('SELLER')")
+    public ResponseEntity<ApiResponse<PageResponse<StoreResponse>>> myStores(
+            @AuthenticationPrincipal User seller,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                storeService.getMyStores(seller,
+                        PageRequest.of(page, size,
+                                Sort.by("createdAt").descending()))));
+    }
+
+    @PatchMapping("/{storeId}")
+    @PreAuthorize("hasRole('SELLER')")
+    public ResponseEntity<ApiResponse<StoreResponse>> updateStore(
+            @AuthenticationPrincipal User seller,
+            @PathVariable Long storeId,
+            @Valid @RequestBody CreateStoreRequest req) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                storeService.updateStore(storeId, seller.getId(), req)));
+    }
+
+    @PostMapping("/{storeId}/toggle-open")
+    @PreAuthorize("hasRole('SELLER')")
+    public ResponseEntity<ApiResponse<StoreResponse>> toggleOpen(
+            @AuthenticationPrincipal User seller,
+            @PathVariable Long storeId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                storeService.toggleOpenStatus(storeId, seller.getId()),
+                "Store status toggled"));
+    }
 
 }

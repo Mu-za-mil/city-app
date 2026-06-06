@@ -3,6 +3,7 @@ package com.cityapp.store.service;
 import com.cityapp.category.repository.CategoryRepository;
 import com.cityapp.common.constants.AppConstants;
 import com.cityapp.common.exception.AppException;
+import com.cityapp.common.response.PageResponse;
 import com.cityapp.store.dto.CreateStoreRequest;
 import com.cityapp.store.dto.StoreResponse;
 import com.cityapp.store.entity.Store;
@@ -12,6 +13,7 @@ import com.cityapp.store.repository.StoreRepository;
 import com.cityapp.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -109,4 +111,63 @@ public class StoreService {
                 .map(storeMapper::toResponse)
                 .toList();
     }
+
+    @Transactional(readOnly = true)
+    public PageResponse<StoreResponse> getMyStores(User seller, Pageable pageable) {
+        return PageResponse.from(
+                storeRepository.findByOwnerIdOrderByCreatedAtDesc(
+                                seller.getId(), pageable)
+                        .map(storeMapper::toResponse));
+    }
+
+    // ── Update ────────────────────────────────────────────────────────────────
+
+    @Transactional
+    public StoreResponse updateStore(Long storeId, Long sellerId, CreateStoreRequest req) {
+        // OWNERSHIP CHECK: returns 404 for both "not found" and "wrong owner"
+        // This is the Information Hiding security pattern
+        Store store = storeRepository.findByIdAndOwnerId(storeId, sellerId)
+                .orElseThrow(() -> AppException.notFound("Store not found: " + storeId));
+
+        if (req.getName() != null)        store.setName(req.getName());
+        if (req.getDescription() != null) store.setDescription(req.getDescription());
+        if (req.getAddress() != null)     store.setAddress(req.getAddress());
+        if (req.getCity() != null)        store.setCity(req.getCity());
+        if (req.getLogoUrl() != null)     store.setLogoUrl(req.getLogoUrl());
+        if (req.getBannerUrl() != null)   store.setBannerUrl(req.getBannerUrl());
+        if (req.getOpeningTime() != null) store.setOpeningTime(req.getOpeningTime());
+        if (req.getClosingTime() != null) store.setClosingTime(req.getClosingTime());
+        if (req.getMinOrderAmount() != null) store.setMinOrderAmount(req.getMinOrderAmount());
+
+        if (req.getLatitude() != null && req.getLongitude() != null) {
+            store.setCoordinates(req.getLatitude(), req.getLongitude());
+        }
+
+        if (req.getCategoryId() != null) {
+            store.setCategory(categoryRepository.findById(req.getCategoryId())
+                    .orElseThrow(() -> AppException.notFound("Category not found")));
+        }
+
+        return storeMapper.toResponse(storeRepository.save(store));
+    }
+
+    @Transactional
+    public StoreResponse toggleOpenStatus(Long storeId, Long sellerId) {
+        Store store = storeRepository.findByIdAndOwnerId(storeId, sellerId)
+                .orElseThrow(() -> AppException.notFound("Store not found: " + storeId));
+
+        if (store.getStatus() != StoreStatus.ACTIVE) {
+            throw AppException.badRequest(
+                    "Only ACTIVE stores can be toggled open/closed. " +
+                            "Current status: " + store.getStatus());
+        }
+
+        store.setOpen(!store.isOpen());
+        Store saved = storeRepository.save(store);
+
+        log.info("Store {} toggled: open={} by seller={}",
+                storeId, saved.isOpen(), sellerId);
+        return storeMapper.toResponse(saved);
+    }
+
 }
