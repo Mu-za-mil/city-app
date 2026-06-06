@@ -104,7 +104,11 @@ public class SecurityConfig {
                                 ).permitAll()
 
                                 // Health checks: Kubernetes probes, monitoring systems
-                                .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                                .requestMatchers(
+                                        "/actuator/health/**",
+                                        "/actuator/info",
+                                        "/actuator/prometheus",  // Add this line
+                                        "/actuator/metrics/**").permitAll()
 
                                 // Swagger/OpenAPI (dev only — restrict in production)
                                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
