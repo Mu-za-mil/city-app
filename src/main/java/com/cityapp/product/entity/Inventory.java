@@ -2,6 +2,8 @@ package com.cityapp.product.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import java.time.Instant;
 
 @Entity
@@ -34,6 +36,7 @@ public class Inventory {
     // The Saga (Phase 10) uses pessimistic locking for order deduction.
     // Two different locking strategies for two different use cases.
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private Instant updatedAt;
 }
