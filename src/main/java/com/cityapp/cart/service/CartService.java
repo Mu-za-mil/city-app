@@ -168,6 +168,252 @@ public class CartService {
         return toResponse(cart);
     }
 
+    // ── Get Cart ──────────────────────────────────────────────────────────────
+
+    public CartResponse getCart(Long userId, Long storeId) {
+        Cart cart = loadCart(userId, storeId);
+        if (cart == null) {
+            return CartResponse.builder()
+                    .storeId(storeId)
+                    .items(List.of())
+                    .totalItems(0)
+                    .totalAmount(java.math.BigDecimal.ZERO)
+                    .build();
+        }
+        return toResponse(cart);
+    }
+
+    /**
+     * Get all carts for a user (across all stores).
+     *
+     * CRITICAL: Uses SCAN not KEYS.
+     *
+     * WHY SCAN NOT KEYS:
+     *   redis-cli KEYS "cart:42:*" → works in dev with 100 keys.
+     *   In production with 1 million keys:
+     *   KEYS blocks Redis for the entire scan duration.
+     *   Redis is single-threaded for commands.
+     *   During KEYS: ALL other Redis operations are BLOCKED.
+     *   At 1M keys: KEYS takes 50-100ms.
+     *   Every request hitting this endpoint: 50-100ms Redis freeze.
+     *   Other operations (cart updates, JWT blacklist checks): all blocked.
+     *
+     *   SCAN: iterates in batches of ~100 keys.
+     *   Non-blocking: other operations proceed between batches.
+     *   Slightly slower to complete but doesn't freeze Redis.
+     *   ALWAYS use SCAN for pattern-based key searches in production.
+     */
+    public List<CartResponse> getAllCarts(Long userId) {
+        String pattern = AppConstants.REDIS_CART_PREFIX + userId + ":*";
+        List<String> matchedKeys = new ArrayList<>();
+
+        ScanOptions options = ScanOptions.scanOptions()
+                .match(pattern)
+                .count(100)   // scan ~100 keys per batch
+                .build();
+
+        try (Cursor<byte[]> cursor = Objects.requireNonNull(
+                        redisTemplate.getConnectionFactory())
+                .getConnection()
+                .scan(options)) {
+
+            while (cursor.hasNext()) {
+                matchedKeys.add(new String(cursor.next()));
+            }
+
+        } catch (Exception e) {
+            log.warn("Redis SCAN failed for userId={}: {}", userId, e.getMessage());
+            return List.of();
+        }
+
+        return matchedKeys.stream()
+                .map(key -> {
+                    try {
+                        Cart cart = (Cart) redisTemplate.opsForValue().get(key);
+                        return cart != null ? toResponse(cart) : null;
+                    } catch (Exception e) {
+                        log.warn("Failed to load cart from key {}: {}", key, e.getMessage());
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    // ── Remove Item ───────────────────────────────────────────────────────────
+
+    public CartResponse removeItem(Long userId, Long storeId, Long productId) {
+        Cart cart = loadCart(userId, storeId);
+
+        if (cart == null) {
+            throw AppException.notFound("Cart not found");
+        }
+
+        boolean removed = cart.getItems()
+                .removeIf(item -> item.getProductId().equals(productId));
+
+        if (!removed) {
+            throw AppException.notFound("Product not in cart: " + productId);
+        }
+
+        if (cart.isEmpty()) {
+            // Empty cart: remove from Redis entirely
+            clearCart(userId, storeId);
+            return CartResponse.builder().storeId(storeId).items(List.of()).build();
+        }
+
+        cart.setLastUpdated(Instant.now());
+        saveCart(userId, storeId, cart);
+        return toResponse(cart);
+    }
+
+    // ── Update Quantity ───────────────────────────────────────────────────────
+
+    public CartResponse updateQuantity(Long userId, Long storeId,
+                                       Long productId, int newQuantity) {
+        if (newQuantity <= 0) {
+            return removeItem(userId, storeId, productId);
+        }
+
+        Cart cart = loadCart(userId, storeId);
+        if (cart == null) {
+            throw AppException.notFound("Cart not found");
+        }
+
+        CartItem item = cart.findItem(productId);
+        if (item == null) {
+            throw AppException.notFound("Product not in cart: " + productId);
+        }
+
+        // Re-validate stock for the new quantity
+        Inventory inventory = inventoryRepository
+                .findByProductId(productId)
+                .orElseThrow(() -> AppException.notFound("Inventory not found"));
+
+        if (newQuantity > inventory.getQuantity()) {
+            throw AppException.badRequest(
+                    "Only " + inventory.getQuantity() + " available");
+        }
+
+        item.setQuantity(newQuantity);
+        cart.setLastUpdated(Instant.now());
+        saveCart(userId, storeId, cart);
+        return toResponse(cart);
+    }
+
+    // ── Checkout ──────────────────────────────────────────────────────────────
+
+    /**
+     * Convert cart into an order.
+     *
+     * THIS IS THE COMMITMENT POINT.
+     * After checkout: the cart is cleared. The order is created.
+     * All validations that matter for placing an order happen HERE.
+     *
+     * WHY OPERATING HOURS CHECK IS HERE (not at addItem):
+     *   Adding to cart: browsing intent. Not a commitment.
+     *   Checkout: purchase commitment. Full validation required.
+     *
+     *   Buyer adds items at 22:55. Store closes at 23:00.
+     *   Buyer checksout at 23:05 (after close).
+     *   StoreValidator.assertAcceptsOrders() → store is closed → 400.
+     *   Correct. Cannot checkout a closed store.
+     *
+     *   If we checked at addItem too:
+     *   Buyer adds at 22:55 → fine (store open)
+     *   Buyer adds again at 23:05 → "store closed" (even though items already in cart)
+     *   Confusing UX: cart has items but can't add more.
+     *   Better: allow adding at any time, validate at checkout.
+     *
+     * PRICE CHANGE DETECTION:
+     *   The cart stores the snapshot price (price at add-to-cart time).
+     *   If the seller changed the price since:
+     *   We detect this and LOG a warning.
+     *   The ORDER uses the SNAPSHOT price (buyer's original expectation).
+     *   The seller's new price only applies to NEW cart additions.
+     *   This is the fair commerce rule.
+     */
+    @Transactional
+    public OrderResponse checkout(
+            User buyer, CartCheckoutRequest req) {
+
+        Long storeId = req.getStoreId();
+
+        // 1. Load the cart
+        Cart cart = loadCart(buyer.getId(), storeId);
+        if (cart == null || cart.isEmpty()) {
+            throw AppException.badRequest(
+                    "Cart is empty. Add items before checking out.");
+        }
+
+        // 2. Full store validation (status + open flag + operating hours)
+        Store store = storeRepository.findById(storeId)
+                .orElseThrow(() -> AppException.notFound("Store not found"));
+        StoreValidator.assertAcceptsOrders(store);
+        // This checks: status=ACTIVE, open=true, within IST operating hours.
+
+        // 3. Re-validate stock for all items (may have changed since add-to-cart)
+        for (CartItem item : cart.getItems()) {
+            Inventory inv = inventoryRepository
+                    .findByProductId(item.getProductId())
+                    .orElseThrow(() -> AppException.badRequest(
+                            "Product '" + item.getProductName() +
+                                    "' is no longer available"));
+
+            if (inv.getQuantity() < item.getQuantity()) {
+                throw AppException.badRequest(
+                        "Insufficient stock for '" + item.getProductName() +
+                                "': available=" + inv.getQuantity() +
+                                " requested=" + item.getQuantity());
+            }
+
+            // 4. Price change detection
+            Product product = productRepository
+                    .findById(item.getProductId())
+                    .orElseThrow(() -> AppException.badRequest(
+                            "Product '" + item.getProductName() + "' no longer exists"));
+
+            if (product.getPrice().compareTo(item.getUnitPrice()) != 0) {
+                log.warn("Price changed for product {} '{}': cart={} current={}. " +
+                                "Using cart snapshot price.",
+                        item.getProductId(), item.getProductName(),
+                        item.getUnitPrice(), product.getPrice());
+                // We use snapshot price. Order placed at the price buyer saw.
+                // The snapshot price in CartItem is used for OrderItems below.
+            }
+        }
+
+        // 5. Build the PlaceOrderRequest from cart items
+        List<OrderItemRequest> orderItems = cart.getItems().stream()
+                .map(item -> OrderItemRequest.builder()
+                        .productId(item.getProductId())
+                        .quantity(item.getQuantity())
+                        .unitPrice(item.getUnitPrice())  // ← use SNAPSHOT price
+                        .build())
+                .toList();
+
+        PlaceOrderRequest orderReq = PlaceOrderRequest.builder()
+                .storeId(storeId)
+                .orderType(req.getOrderType())
+                .deliveryAddress(req.getDeliveryAddress())
+                .notes(req.getNotes())
+                .items(orderItems)
+                .build();
+
+        // 6. Place the order (delegated to OrderService)
+        com.cityapp.order.dto.OrderResponse orderResponse =
+                orderService.placeOrder(buyer, orderReq);
+
+        // 7. Clear the cart ONLY after order is successfully created
+        // If placeOrder() throws: transaction rolls back, cart is NOT cleared.
+        // Buyer can retry checkout. No data loss.
+        clearCart(buyer.getId(), storeId);
+
+        log.info("Checkout complete: userId={} storeId={} orderId={}",
+                buyer.getId(), storeId, orderResponse.getId());
+
+        return orderResponse;
+    }
 
     // ── Clear Cart ────────────────────────────────────────────────────────────
 
