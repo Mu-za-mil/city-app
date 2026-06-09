@@ -13,6 +13,8 @@ import com.cityapp.store.repository.StoreRepository;
 import com.cityapp.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -62,7 +64,7 @@ public class StoreService {
         return storeMapper.toResponse(saved);
     }
     // ── Read ──────────────────────────────────────────────────────────────────
-
+    @Cacheable(value = "stores", key = "#storeId")
     @Transactional(readOnly = true)
     public StoreResponse getStore(Long storeId) {
         return storeMapper.toResponse(
@@ -123,7 +125,7 @@ public class StoreService {
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
-
+    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
     @Transactional
     public StoreResponse updateStore(Long storeId, Long sellerId, CreateStoreRequest req) {
         // OWNERSHIP CHECK: returns 404 for both "not found" and "wrong owner"
@@ -153,6 +155,7 @@ public class StoreService {
         return storeMapper.toResponse(storeRepository.save(store));
     }
 
+    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
     @Transactional
     public StoreResponse toggleOpenStatus(Long storeId, Long sellerId) {
         Store store = storeRepository.findByIdAndOwnerId(storeId, sellerId)
@@ -174,7 +177,7 @@ public class StoreService {
 
 
     // ── Admin Operations ──────────────────────────────────────────────────────
-
+    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
     @Transactional
     public StoreResponse approveStore(Long storeId) {
         Store store = findStoreOrThrow(storeId);
@@ -188,6 +191,7 @@ public class StoreService {
         return storeMapper.toResponse(storeRepository.save(store));
     }
 
+    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
     @Transactional
     public StoreResponse suspendStore(Long storeId) {
         Store store = findStoreOrThrow(storeId);
