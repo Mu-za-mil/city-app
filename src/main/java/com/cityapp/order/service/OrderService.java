@@ -257,7 +257,94 @@ public class OrderService {
         return buildOrderResponse(confirmedOrder);
     }
 
+    // ── Status Updates ────────────────────────────────────────────────────────
 
+    @Transactional
+    public OrderResponse updateStatus(Long orderId, Long sellerId,
+                                      UpdateStatusRequest req) {
+
+        // Ownership: seller can only update their store's orders
+        Order order = orderRepository.findByIdAndStoreId(orderId, sellerId)
+                .orElseThrow(() -> AppException.notFound(
+                        "Order not found: " + orderId));
+
+        // State machine validation
+        if (!order.getStatus().canTransitionTo(req.getStatus())) {
+            throw AppException.badRequest(
+                    "Cannot transition from " + order.getStatus() +
+                            " to " + req.getStatus() +
+                            ". Invalid state machine transition.");
+        }
+
+        // Special rules for CANCELLED status
+        if (req.getStatus() == OrderStatus.CANCELLED) {
+            validateCancellation(order, req.getCancellationReason());
+        }
+
+        order.setStatus(req.getStatus());
+        if (req.getCancellationReason() != null) {
+            order.setCancellationReason(req.getCancellationReason());
+        }
+
+        Order saved = orderRepository.save(order);
+        log.info("Order status updated: id={} status={}", orderId, req.getStatus());
+        return buildOrderResponse(saved);
+    }
+
+    @Transactional
+    public OrderResponse cancelOrder(Long orderId, Long buyerId, String reason) {
+
+        // Buyers can only cancel their own orders
+        Order order = orderRepository.findByIdAndUserId(orderId, buyerId)
+                .orElseThrow(() -> AppException.notFound(
+                        "Order not found: " + orderId));
+
+        if (!order.getStatus().canTransitionTo(OrderStatus.CANCELLED)) {
+            throw AppException.badRequest(
+                    "Order in status '" + order.getStatus() +
+                            "' cannot be cancelled. " +
+                            "Contact support for assistance.");
+        }
+
+        validateCancellation(order, reason);
+
+        order.setStatus(OrderStatus.CANCELLED);
+        order.setCancellationReason(reason);
+
+        Order saved = orderRepository.save(order);
+        log.info("Order cancelled by buyer: id={} reason={}", orderId, reason);
+        return buildOrderResponse(saved);
+    }
+
+    private void validateCancellation(Order order, String reason) {
+        /*
+         * BUSINESS RULE: Cannot cancel an order with a successful payment.
+         *
+         * WHY:
+         *   Payment status = SUCCESS → Razorpay has captured money.
+         *   Simply cancelling the order doesn't trigger a Razorpay refund.
+         *   The money is still held by Razorpay.
+         *   Seller never gets paid. Buyer thinks they're refunded. They're not.
+         *   Financial discrepancy. Compliance issue.
+         *
+         *   Correct process:
+         *   1. Admin initiates refund through Razorpay dashboard.
+         *   2. Razorpay webhook fires: payment.refunded.
+         *   3. System updates payment status to REFUNDED.
+         *   4. System updates order status to CANCELLED.
+         *
+         *   For Phase 7: block cancellation of paid orders.
+         *   Phase 12 (Notifications) will add: "your refund has been initiated" notification.
+         */
+        paymentRepository.findByOrderId(order.getId())
+                .ifPresent(payment -> {
+                    if (payment.getStatus() == Payment.PaymentStatus.SUCCESS) {
+                        throw AppException.badRequest(
+                                "Cannot cancel a paid order. " +
+                                        "Please contact support to initiate a refund.");
+                    }
+                });
+    }
 
     // ── Private Helpers ────────────────────────────────────────────────────────
 
