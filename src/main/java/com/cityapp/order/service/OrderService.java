@@ -346,6 +346,36 @@ public class OrderService {
                 });
     }
 
+    // ── Queries ────────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public OrderResponse getOrder(Long orderId, Long userId) {
+        Order order = orderRepository.findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> AppException.notFound(
+                        "Order not found: " + orderId));
+        return buildOrderResponse(order);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderResponse> getMyOrders(Long userId, Pageable pageable) {
+        return PageResponse.from(
+                orderRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+                        .map(this::buildOrderResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderResponse> getStoreOrders(Long storeId,
+                                                      OrderStatus status,
+                                                      Pageable pageable) {
+        Page<Order> page = status != null
+                ? orderRepository.findByStoreIdAndStatusOrderByCreatedAtDesc(
+                storeId, status, pageable)
+                : orderRepository.findByStoreIdOrderByCreatedAtDesc(
+                storeId, pageable);
+        return PageResponse.from(page.map(this::buildOrderResponse));
+    }
+
+
     // ── Private Helpers ────────────────────────────────────────────────────────
 
     private OrderResponse buildOrderResponse(Order order) {

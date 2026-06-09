@@ -23,6 +23,28 @@ public class OrderController {
 
     private final OrderService orderService;
 
+    // ── Buyer endpoints ───────────────────────────────────────────────────────
+
+    @GetMapping("/{orderId}")
+    public ResponseEntity<ApiResponse<OrderResponse>> getOrder(
+            @AuthenticationPrincipal User buyer,
+            @PathVariable Long orderId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                orderService.getOrder(orderId, buyer.getId())));
+    }
+
+    @GetMapping("/my")
+    public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> myOrders(
+            @AuthenticationPrincipal User buyer,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                orderService.getMyOrders(
+                        buyer.getId(),
+                        PageRequest.of(page, size,
+                                Sort.by("createdAt").descending()))));
+    }
+
     @PostMapping("/{orderId}/cancel")
     public ResponseEntity<ApiResponse<OrderResponse>> cancelOrder(
             @AuthenticationPrincipal User buyer,
@@ -34,6 +56,21 @@ public class OrderController {
     }
 
     // ── Seller endpoints ──────────────────────────────────────────────────────
+
+
+    @GetMapping("/store/{storeId}")
+    @PreAuthorize("hasRole('SELLER')")
+    public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> storeOrders(
+            @PathVariable Long storeId,
+            @RequestParam(required = false) OrderStatus status,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                orderService.getStoreOrders(
+                        storeId, status,
+                        PageRequest.of(page, size,
+                                Sort.by("createdAt").descending()))));
+    }
 
     @PatchMapping("/{orderId}/status")
     @PreAuthorize("hasRole('SELLER') or hasRole('SUPER_ADMIN')")
