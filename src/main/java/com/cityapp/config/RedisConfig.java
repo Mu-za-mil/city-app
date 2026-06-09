@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.cache.RedisCacheWriter;
@@ -115,6 +117,16 @@ public class RedisConfig {
         return mapper;
     }
 
+    @Bean
+    @Primary
+    public ObjectMapper objectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        // NO default typing here
+        return mapper;
+    }
+
     /**
      * Primary RedisTemplate for complex objects (Cart, etc.).
      * Keys: String serialisation (human-readable Redis keys).
@@ -123,6 +135,7 @@ public class RedisConfig {
     @Bean
     public RedisTemplate<String, Object> redisTemplate(
             RedisConnectionFactory connectionFactory,
+            @Qualifier("redisObjectMapper")
             ObjectMapper redisObjectMapper) {
 
         RedisTemplate<String, Object> template = new RedisTemplate<>();
@@ -167,6 +180,7 @@ public class RedisConfig {
     @Bean
     public RedisCacheManager cacheManager(
             RedisConnectionFactory connectionFactory,
+            @Qualifier("redisObjectMapper")
             ObjectMapper redisObjectMapper) {
 
         GenericJackson2JsonRedisSerializer jsonSerializer =
