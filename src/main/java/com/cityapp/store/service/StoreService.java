@@ -125,6 +125,16 @@ public class StoreService {
         // Current: O(N) Haversine full table scan. Acceptable for < 5000 stores.
     }
 
+    /**
+     * Trending stores: read from the cache, populated by the scheduler.
+     * Users ALWAYS get cached data. Never waits for the DB query.
+     *
+     * CACHE KEY: "trending::{days}:{limit}"
+     * Different time windows and limits = different cache entries.
+     * "trending::7:10" = top 10 stores in last 7 days.
+     */
+    @Cacheable(value = AppConstants.CACHE_TRENDING,
+            key = "#days + ':' + #limit")
     @Transactional(readOnly = true)
     public List<StoreResponse> findTrending(int days, int limit) {
         int safeDays  = Math.max(1, Math.min(days, 90));
@@ -134,6 +144,36 @@ public class StoreService {
                 .map(storeMapper::toResponse)
                 .toList();
     }
+
+    /**
+     * Proactively refreshes the trending stores cache every 5 minutes.
+     * Runs the expensive query in the background so users never wait.
+     *
+     * @CacheEvict first: clears old cached value.
+     * Then findTrending() call: executes query, populates cache.
+     * Next user request: cache hit. Zero wait.
+     *
+     * WHY @Scheduled NOT @CachePut HERE:
+     *   @CachePut always executes the method AND updates the cache.
+     *   @Scheduled + @CacheEvict + method call: same effect but more explicit.
+     *   Shows the intent: "periodically refresh this data."
+     *
+     * IMPORTANT: @CacheEvict and the method call must be in a @Transactional
+     * context to work correctly with Spring AOP proxies.
+     * @Scheduled runs outside the Spring transaction context.
+     * Call a @Transactional method (findTrending) from the scheduled method.
+     * Spring creates a proxy → @Cacheable runs correctly.
+     */
+    @Scheduled(fixedDelay = 300_000)  // Every 5 minutes
+    @CacheEvict(value = AppConstants.CACHE_TRENDING, allEntries = true)
+    public void refreshTrendingCache() {
+        log.debug("Refreshing trending stores cache...");
+        // Pre-populate the most common requests:
+        findTrending(7, 10);   // default: top 10 in last 7 days
+        findTrending(30, 20);  // monthly: top 20 in last 30 days
+        log.debug("Trending cache refreshed");
+    }
+
 
     @Transactional(readOnly = true)
     public PageResponse<StoreResponse> getMyStores(User seller, Pageable pageable) {
