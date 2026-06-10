@@ -129,7 +129,7 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
         FROM stores s
         JOIN orders o ON o.store_id = s.id
         WHERE s.status = 'ACTIVE'
-          AND o.created_at > NOW() - INTERVAL ':days days'
+          AND o.created_at > NOW() - (:days || ' days')::INTERVAL
           AND o.status NOT IN ('CANCELLED')
         GROUP BY s.id
         ORDER BY COUNT(o.id) DESC
