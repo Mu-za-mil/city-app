@@ -64,7 +64,26 @@ public class StoreService {
         return storeMapper.toResponse(saved);
     }
     // ── Read ──────────────────────────────────────────────────────────────────
-    @Cacheable(value = "stores", key = "#storeId")
+
+    /**
+     * @Cacheable: on first call, queries DB and stores result in Redis.
+     * On subsequent calls: returns Redis value. DB not queried.
+     *
+     * key = "#storeId":
+     *   SpEL expression. Evaluates to the method parameter value.
+     *   Redis key: "stores::10" (cacheName + "::" + key)
+     *   Different storeId → different cache entry.
+     *   store 10: "stores::10", store 11: "stores::11" — independent entries.
+     *
+     * unless = "#result == null":
+     *   Don't cache null results.
+     *   If store not found: AppException.notFound() is thrown (never reaches cache).
+     *   Unless without this: null is cached → next request returns null from cache →
+     *   no DB query → 200 OK with null data instead of 404.
+     *   With this: null never cached → next request queries DB → correct 404.
+     */
+    @Cacheable(value = AppConstants.CACHE_STORES, key = "#storeId",
+            unless = "#result == null")
     @Transactional(readOnly = true)
     public StoreResponse getStore(Long storeId) {
         return storeMapper.toResponse(
@@ -125,7 +144,26 @@ public class StoreService {
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
-    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
+
+    /**
+     * @CacheEvict: when a store is updated, remove it from cache.
+     * Next read: cache miss → DB query → fresh data cached.
+     *
+     * WHY NOT @CachePut (update cache on write):
+     *   @CachePut: after save(), put the new value in cache.
+     *   Sounds good. Problem: the mapper needs the full entity with all JOIN data.
+     *   If the save operation only has partial data (just the fields being updated):
+     *   the cached response would have null for owner.name, category.name etc.
+     *   Safer: evict on write, reload on next read.
+     *   The one extra DB query on next read is cheap compared to serving bad data.
+     *
+     * allEntries = false (default): only evict the specific key.
+     * We know exactly which store changed: evict only "stores::10", not all stores.
+     * allEntries = true: evict ALL entries in the cache.
+     * Never use unless you must (evicts unrelated stores unnecessarily).
+     */
+    @CacheEvict(value = {AppConstants.CACHE_STORES, AppConstants.CACHE_STORE_STATUS},
+            key = "#storeId")
     @Transactional
     public StoreResponse updateStore(Long storeId, Long sellerId, CreateStoreRequest req) {
         // OWNERSHIP CHECK: returns 404 for both "not found" and "wrong owner"
@@ -155,7 +193,8 @@ public class StoreService {
         return storeMapper.toResponse(storeRepository.save(store));
     }
 
-    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
+    @CacheEvict(value = {AppConstants.CACHE_STORES, AppConstants.CACHE_STORE_STATUS},
+            key = "#storeId")
     @Transactional
     public StoreResponse toggleOpenStatus(Long storeId, Long sellerId) {
         Store store = storeRepository.findByIdAndOwnerId(storeId, sellerId)
@@ -177,7 +216,8 @@ public class StoreService {
 
 
     // ── Admin Operations ──────────────────────────────────────────────────────
-    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
+    @CacheEvict(value = {AppConstants.CACHE_STORES, AppConstants.CACHE_STORE_STATUS},
+            key = "#storeId")
     @Transactional
     public StoreResponse approveStore(Long storeId) {
         Store store = findStoreOrThrow(storeId);
@@ -191,7 +231,8 @@ public class StoreService {
         return storeMapper.toResponse(storeRepository.save(store));
     }
 
-    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
+    @CacheEvict(value = {AppConstants.CACHE_STORES, AppConstants.CACHE_STORE_STATUS},
+            key = "#storeId")
     @Transactional
     public StoreResponse suspendStore(Long storeId) {
         Store store = findStoreOrThrow(storeId);
