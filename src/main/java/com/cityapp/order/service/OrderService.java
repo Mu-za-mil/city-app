@@ -1,10 +1,25 @@
 package com.cityapp.order.service;
 
-import com.cityapp.common.constants.AppConstants;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
-import com.cityapp.order.dto.*;
-import com.cityapp.order.entity.*;
+import com.cityapp.order.dto.OrderItemRequest;
+import com.cityapp.order.dto.OrderResponse;
+import com.cityapp.order.dto.PlaceOrderRequest;
+import com.cityapp.order.dto.UpdateStatusRequest;
+import com.cityapp.order.entity.Order;
+import com.cityapp.order.entity.OrderItem;
+import com.cityapp.order.entity.OrderStatus;
+import com.cityapp.order.entity.OrderType;
 import com.cityapp.order.mapper.OrderMapper;
 import com.cityapp.order.repository.OrderRepository;
 import com.cityapp.payment.entity.Payment;
@@ -16,18 +31,9 @@ import com.cityapp.product.repository.ProductRepository;
 import com.cityapp.store.entity.Store;
 import com.cityapp.store.repository.StoreRepository;
 import com.cityapp.user.entity.User;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -264,7 +270,7 @@ public class OrderService {
                                       UpdateStatusRequest req) {
 
         // Ownership: seller can only update their store's orders
-        Order order = orderRepository.findByIdAndStoreId(orderId, sellerId)
+        Order order = orderRepository.findByIdAndStoreOwnerId(orderId, sellerId)
                 .orElseThrow(() -> AppException.notFound(
                         "Order not found: " + orderId));
 

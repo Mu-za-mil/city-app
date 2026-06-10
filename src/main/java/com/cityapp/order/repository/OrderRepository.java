@@ -1,16 +1,17 @@
 package com.cityapp.order.repository;
 
-import com.cityapp.order.entity.Order;
-import com.cityapp.order.entity.OrderStatus;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
+import com.cityapp.order.entity.Order;
+import com.cityapp.order.entity.OrderStatus;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
@@ -22,8 +23,13 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByIdAndUserId(Long orderId, Long userId);
     // Ownership check: buyer can only see their own orders.
 
-    Optional<Order> findByIdAndStoreId(Long orderId, Long storeId);
-    // Ownership check: seller can only see their store's orders.
+    /**
+     * Find an order by id where the store's owner (seller) matches the given ownerId.
+     * This is used when the authenticated principal is a seller (User) and we need
+     * to verify they own the store for the order without requiring the client to
+     * pass the store id.
+     */
+    Optional<Order> findByIdAndStoreOwnerId(Long orderId, Long ownerId);
 
     // ── List queries ──────────────────────────────────────────────────────────
 
