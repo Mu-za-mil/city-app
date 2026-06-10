@@ -397,6 +397,7 @@ public class CartService {
                 .orderType(req.getOrderType())
                 .deliveryAddress(req.getDeliveryAddress())
                 .notes(req.getNotes())
+                .idempotencyKey(req.getIdempotencyKey())  // ← forward idempotency key
                 .items(orderItems)
                 .build();
 
