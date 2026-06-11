@@ -38,7 +38,7 @@ public class CacheMetricsConfig {
     private final MeterRegistry meterRegistry;
 
     @Bean
-    public CacheMetricsRegistrar cacheMetricsRegistrar() {
+    public CacheMetricsRegistrar customCacheMetricsRegistrar() {
         return new CacheMetricsRegistrar(
                 meterRegistry,
                 (Collection<CacheMeterBinderProvider<?>>) cacheManager
