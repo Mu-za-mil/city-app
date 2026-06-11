@@ -347,6 +347,24 @@ public class StoreService {
         }
     }
 
+    /**
+     * Cache the store's operational status separately from the full store data.
+     * WHY SEPARATE CACHE:
+     *   storeStatus TTL = 30 seconds (must be fresh for checkout validation).
+     *   stores TTL = 5 minutes (full store profile changes rarely).
+     *   If we cached open/closed in "stores" cache:
+     *   Seller closes store → 5 minutes until buyers see it as closed.
+     *   Buyers can checkout a "closed" store for 5 minutes. Wrong.
+     *   Separate storeStatus cache with 30s TTL: buyers see status within 30 seconds.
+     */
+    @Cacheable(value = AppConstants.CACHE_STORE_STATUS, key = "#storeId")
+    @Transactional(readOnly = true)
+    public boolean isStoreOpen(Long storeId) {
+        return storeRepository.findById(storeId)
+                .map(Store::isOpen)
+                .orElse(false);
+    }
+
     // ── Private ────────────────────────────────────────────────────────────────
 
     private Store findStoreOrThrow(Long storeId) {
