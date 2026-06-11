@@ -12,6 +12,30 @@ import java.util.Optional;
 
 public interface InventoryRepository extends JpaRepository<Inventory, Long> {
 
+    /**
+     * NEVER CACHE inventory/stock quantities.
+     *
+     * WHY:
+     *   If quantity=1 is cached and two buyers check simultaneously:
+     *   Both see quantity=1 (from cache).
+     *   Both proceed to checkout.
+     *   Checkout: SELECT FOR UPDATE (bypasses cache, reads real DB value).
+     *   Result: one succeeds, one fails (correct).
+     *
+     *   BUT: if the cart "Add Item" check reads cached quantity=1:
+     *   Both buyers add the last item to their carts (passes the soft check).
+     *   Both proceed to checkout.
+     *   One succeeds. One gets "insufficient stock" at checkout.
+     *   Buyer who fails: added to cart, got excited, then rejected at checkout.
+     *   Frustrating UX but technically correct (the checkout is the hard check).
+     *
+     *   The soft check (add-to-cart) reading live inventory:
+     *   Reduces the number of "happy path abandoned" checkouts.
+     *   Cost: one DB read per add-to-cart. Acceptable for correctness.
+     *
+     *   RULE: Inventory quantity is correctness-critical. Never cache.
+     */
+
     Optional<Inventory> findByProductId(Long productId);
 
     // Batch fetch: used in Phase 10 (Saga) and SearchService (N+1 fix)
