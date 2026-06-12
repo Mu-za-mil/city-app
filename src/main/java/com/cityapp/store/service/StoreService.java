@@ -165,6 +165,7 @@ public class StoreService {
      * Spring creates a proxy → @Cacheable runs correctly.
      */
     @Scheduled(fixedDelay = 300_000)  // Every 5 minutes
+    @Transactional(readOnly = true)
     @CacheEvict(value = AppConstants.CACHE_TRENDING, allEntries = true)
     public void refreshTrendingCache() {
         log.debug("Refreshing trending stores cache...");
