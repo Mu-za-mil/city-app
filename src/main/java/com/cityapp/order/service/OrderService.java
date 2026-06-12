@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import com.cityapp.common.event.EventPublisher;
 import com.cityapp.common.event.OrderCreatedEvent;
+import com.cityapp.common.event.OrderStatusChangedEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -321,6 +322,19 @@ public class OrderService {
         }
 
         Order saved = orderRepository.save(order);
+
+        eventPublisher.publishOrderStatusChanged(
+                OrderStatusChangedEvent.builder()
+                        .eventId(EventPublisher.generateEventId())
+                        .orderId(saved.getId())
+                        .userId(saved.getUser().getId())
+                        .sellerId(saved.getStore().getOwner().getId())
+                        .previousStatus(order.getStatus())  // status before update
+                        .newStatus(req.getStatus())
+                        .cancellationReason(req.getCancellationReason())
+                        .timestamp(Instant.now())
+                        .build());
+
         log.info("Order status updated: id={} status={}", orderId, req.getStatus());
         return buildOrderResponse(saved);
     }
