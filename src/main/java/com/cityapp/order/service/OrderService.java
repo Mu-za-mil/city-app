@@ -1,10 +1,13 @@
 package com.cityapp.order.service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.cityapp.common.event.EventPublisher;
+import com.cityapp.common.event.OrderCreatedEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -46,6 +49,7 @@ public class OrderService {
     private final StoreRepository storeRepository;
     private final PaymentRepository paymentRepository;
     private final OrderMapper orderMapper;
+    private final EventPublisher eventPublisher;
 
     // Minimum order amount in Indian Rupees
     private static final BigDecimal MINIMUM_ORDER_AMOUNT = BigDecimal.ONE;
@@ -257,7 +261,31 @@ public class OrderService {
 
         log.info("Order confirmed: id={} total={}", confirmedOrder.getId(), total);
 
-        // Phase 9 will add: Kafka event publish (order.created)
+        List<OrderCreatedEvent.OrderItemInfo> itemInfos = confirmedOrder.getItems()
+                .stream()
+                .map(item -> OrderCreatedEvent.OrderItemInfo.builder()
+                        .productId(item.getProduct().getId())
+                        .productName(item.getProductName())
+                        .quantity(item.getQuantity())
+                        .unitPrice(item.getUnitPrice())
+                        .build())
+                .toList();
+
+        eventPublisher.publishOrderCreated(
+                OrderCreatedEvent.builder()
+                        .eventId(EventPublisher.generateEventId())
+                        .orderId(confirmedOrder.getId())
+                        .userId(buyer.getId())
+                        .sellerId(confirmedOrder.getStore().getOwner().getId())
+                        .storeId(confirmedOrder.getStore().getId())
+                        .storeName(confirmedOrder.getStore().getName())
+                        .orderType(confirmedOrder.getOrderType())
+                        .totalAmount(confirmedOrder.getTotalAmount())
+                        .deliveryAddress(confirmedOrder.getDeliveryAddress())
+                        .items(itemInfos)
+                        .timestamp(Instant.now())
+                        .build());
+
         // Phase 10 will replace steps 8-9 with async Saga
 
         return buildOrderResponse(confirmedOrder);
