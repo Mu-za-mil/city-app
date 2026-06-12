@@ -17,6 +17,8 @@ import com.cityapp.store.repository.StoreRepository;
 import com.cityapp.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -44,6 +46,7 @@ public class ProductService {
 
     // ── Create ────────────────────────────────────────────────────────────────
 
+    @CacheEvict(value = AppConstants.CACHE_PRODUCTS, key = "#result.id")
     @Transactional
     public ProductResponse createProduct(Long storeId, User seller, CreateProductRequest req) {
         // Verify seller owns the store
@@ -160,7 +163,57 @@ public class ProductService {
                     .build();
         }));
     }
+    /**
+     * Cache individual product lookups.
+     * TTL: 10 minutes (configured in RedisConfig).
+     * Evict: when product is updated or deactivated.
+     *
+     * WHY NOT CACHE PRODUCT SEARCH (searchProducts()):
+     *   Search has combinatorial cache keys:
+     *   storeId + keyword + categoryId + minPrice + maxPrice + page + size + sort
+     *   = thousands of unique combinations.
+     *   Cache hit rate would be near 0 (each combination unique).
+     *   Cache memory used for keys that are never reused.
+     *   RULE: Only cache queries that will be REPEATED with the same parameters.
+     *   Product search is never the same twice. Don't cache it.
+     *   Product detail (by ID): always the same for the same ID. Cache it.
+     */
+    @Cacheable(value = AppConstants.CACHE_PRODUCTS, key = "#productId",
+            unless = "#result == null")
+    @Transactional(readOnly = true)
+    public ProductResponse getProductById(Long productId) {
+        Product product = productRepository.findByIdAndActiveTrue(productId)
+                .orElseThrow(() -> AppException.notFound(
+                        "Product not found: " + productId));
 
+        Inventory inv = inventoryRepository.findByProductId(productId)
+                .orElse(null);
+
+        return buildProductResponse(product, inv != null ? inv.getQuantity() : 0);
+    }
+
+    @CacheEvict(value = AppConstants.CACHE_PRODUCTS, key = "#productId")
+    @Transactional
+    public ProductResponse updateProduct(Long productId, Long sellerId,
+                                         CreateProductRequest req) {
+        Product product = productRepository
+                .findByIdAndActiveTrue(productId)
+                .orElseThrow(() -> AppException.notFound(
+                        "Product not found: " + productId));
+
+        if (!product.getStore().getOwner().getId().equals(sellerId)) {
+            throw AppException.notFound("Product not found: " + productId);
+        }
+
+        if (req.getName() != null)        product.setName(req.getName());
+        if (req.getDescription() != null) product.setDescription(req.getDescription());
+        if (req.getPrice() != null)       product.setPrice(req.getPrice());
+        if (req.getUnit() != null)        product.setUnit(req.getUnit());
+        if (req.getImageUrls() != null)   product.setImageUrls(req.getImageUrls());
+
+        return buildProductResponse(
+                productRepository.save(product), 0);
+    }
 
     // ── Inventory Management ──────────────────────────────────────────────────
 
@@ -208,4 +261,28 @@ public class ProductService {
                 productId, quantity, ex.getMessage());
         return false; // Treat as insufficient stock
     }
+    // --- Helper Methods
+
+    private ProductResponse buildProductResponse(Product product, int stockQty) {
+        return ProductResponse.builder()
+                .id(product.getId())
+                .storeId(product.getStore().getId())
+                .storeName(product.getStore().getName())
+                .name(product.getName())
+                .description(product.getDescription())
+                .sku(product.getSku())
+                .price(product.getPrice())
+                .compareAtPrice(product.getCompareAtPrice())
+                .unit(product.getUnit())
+                .categoryName(product.getCategory() != null
+                        ? product.getCategory().getName() : null)
+                .active(product.isActive())
+                .avgRating(product.getAvgRating())
+                .totalReviews(product.getTotalReviews())
+                .imageUrls(product.getImageUrls())
+                .stockQuantity(stockQty)
+                .createdAt(product.getCreatedAt())
+                .build();
+    }
+
 }

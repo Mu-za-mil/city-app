@@ -64,7 +64,26 @@ public class StoreService {
         return storeMapper.toResponse(saved);
     }
     // ── Read ──────────────────────────────────────────────────────────────────
-    @Cacheable(value = "stores", key = "#storeId")
+
+    /**
+     * @Cacheable: on first call, queries DB and stores result in Redis.
+     * On subsequent calls: returns Redis value. DB not queried.
+     *
+     * key = "#storeId":
+     *   SpEL expression. Evaluates to the method parameter value.
+     *   Redis key: "stores::10" (cacheName + "::" + key)
+     *   Different storeId → different cache entry.
+     *   store 10: "stores::10", store 11: "stores::11" — independent entries.
+     *
+     * unless = "#result == null":
+     *   Don't cache null results.
+     *   If store not found: AppException.notFound() is thrown (never reaches cache).
+     *   Unless without this: null is cached → next request returns null from cache →
+     *   no DB query → 200 OK with null data instead of 404.
+     *   With this: null never cached → next request queries DB → correct 404.
+     */
+    @Cacheable(value = AppConstants.CACHE_STORES, key = "#storeId",
+            unless = "#result == null")
     @Transactional(readOnly = true)
     public StoreResponse getStore(Long storeId) {
         return storeMapper.toResponse(
@@ -106,6 +125,16 @@ public class StoreService {
         // Current: O(N) Haversine full table scan. Acceptable for < 5000 stores.
     }
 
+    /**
+     * Trending stores: read from the cache, populated by the scheduler.
+     * Users ALWAYS get cached data. Never waits for the DB query.
+     *
+     * CACHE KEY: "trending::{days}:{limit}"
+     * Different time windows and limits = different cache entries.
+     * "trending::7:10" = top 10 stores in last 7 days.
+     */
+    @Cacheable(value = AppConstants.CACHE_TRENDING,
+            key = "#days + ':' + #limit")
     @Transactional(readOnly = true)
     public List<StoreResponse> findTrending(int days, int limit) {
         int safeDays  = Math.max(1, Math.min(days, 90));
@@ -116,6 +145,37 @@ public class StoreService {
                 .toList();
     }
 
+    /**
+     * Proactively refreshes the trending stores cache every 5 minutes.
+     * Runs the expensive query in the background so users never wait.
+     *
+     * @CacheEvict first: clears old cached value.
+     * Then findTrending() call: executes query, populates cache.
+     * Next user request: cache hit. Zero wait.
+     *
+     * WHY @Scheduled NOT @CachePut HERE:
+     *   @CachePut always executes the method AND updates the cache.
+     *   @Scheduled + @CacheEvict + method call: same effect but more explicit.
+     *   Shows the intent: "periodically refresh this data."
+     *
+     * IMPORTANT: @CacheEvict and the method call must be in a @Transactional
+     * context to work correctly with Spring AOP proxies.
+     * @Scheduled runs outside the Spring transaction context.
+     * Call a @Transactional method (findTrending) from the scheduled method.
+     * Spring creates a proxy → @Cacheable runs correctly.
+     */
+    @Scheduled(fixedDelay = 300_000)  // Every 5 minutes
+    @Transactional(readOnly = true)
+    @CacheEvict(value = AppConstants.CACHE_TRENDING, allEntries = true)
+    public void refreshTrendingCache() {
+        log.debug("Refreshing trending stores cache...");
+        // Pre-populate the most common requests:
+        findTrending(7, 10);   // default: top 10 in last 7 days
+        findTrending(30, 20);  // monthly: top 20 in last 30 days
+        log.debug("Trending cache refreshed");
+    }
+
+
     @Transactional(readOnly = true)
     public PageResponse<StoreResponse> getMyStores(User seller, Pageable pageable) {
         return PageResponse.from(
@@ -125,7 +185,26 @@ public class StoreService {
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
-    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
+
+    /**
+     * @CacheEvict: when a store is updated, remove it from cache.
+     * Next read: cache miss → DB query → fresh data cached.
+     *
+     * WHY NOT @CachePut (update cache on write):
+     *   @CachePut: after save(), put the new value in cache.
+     *   Sounds good. Problem: the mapper needs the full entity with all JOIN data.
+     *   If the save operation only has partial data (just the fields being updated):
+     *   the cached response would have null for owner.name, category.name etc.
+     *   Safer: evict on write, reload on next read.
+     *   The one extra DB query on next read is cheap compared to serving bad data.
+     *
+     * allEntries = false (default): only evict the specific key.
+     * We know exactly which store changed: evict only "stores::10", not all stores.
+     * allEntries = true: evict ALL entries in the cache.
+     * Never use unless you must (evicts unrelated stores unnecessarily).
+     */
+    @CacheEvict(value = {AppConstants.CACHE_STORES, AppConstants.CACHE_STORE_STATUS},
+            key = "#storeId")
     @Transactional
     public StoreResponse updateStore(Long storeId, Long sellerId, CreateStoreRequest req) {
         // OWNERSHIP CHECK: returns 404 for both "not found" and "wrong owner"
@@ -155,7 +234,8 @@ public class StoreService {
         return storeMapper.toResponse(storeRepository.save(store));
     }
 
-    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
+    @CacheEvict(value = {AppConstants.CACHE_STORES, AppConstants.CACHE_STORE_STATUS},
+            key = "#storeId")
     @Transactional
     public StoreResponse toggleOpenStatus(Long storeId, Long sellerId) {
         Store store = storeRepository.findByIdAndOwnerId(storeId, sellerId)
@@ -177,7 +257,8 @@ public class StoreService {
 
 
     // ── Admin Operations ──────────────────────────────────────────────────────
-    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
+    @CacheEvict(value = {AppConstants.CACHE_STORES, AppConstants.CACHE_STORE_STATUS},
+            key = "#storeId")
     @Transactional
     public StoreResponse approveStore(Long storeId) {
         Store store = findStoreOrThrow(storeId);
@@ -191,7 +272,8 @@ public class StoreService {
         return storeMapper.toResponse(storeRepository.save(store));
     }
 
-    @CacheEvict(value = {"stores", "storeStatus"}, key = "#storeId")
+    @CacheEvict(value = {AppConstants.CACHE_STORES, AppConstants.CACHE_STORE_STATUS},
+            key = "#storeId")
     @Transactional
     public StoreResponse suspendStore(Long storeId) {
         Store store = findStoreOrThrow(storeId);
@@ -264,6 +346,24 @@ public class StoreService {
             // Overnight: e.g. 22:00 → 02:00
             return now.isAfter(open) || now.isBefore(close);
         }
+    }
+
+    /**
+     * Cache the store's operational status separately from the full store data.
+     * WHY SEPARATE CACHE:
+     *   storeStatus TTL = 30 seconds (must be fresh for checkout validation).
+     *   stores TTL = 5 minutes (full store profile changes rarely).
+     *   If we cached open/closed in "stores" cache:
+     *   Seller closes store → 5 minutes until buyers see it as closed.
+     *   Buyers can checkout a "closed" store for 5 minutes. Wrong.
+     *   Separate storeStatus cache with 30s TTL: buyers see status within 30 seconds.
+     */
+    @Cacheable(value = AppConstants.CACHE_STORE_STATUS, key = "#storeId")
+    @Transactional(readOnly = true)
+    public boolean isStoreOpen(Long storeId) {
+        return storeRepository.findById(storeId)
+                .map(Store::isOpen)
+                .orElse(false);
     }
 
     // ── Private ────────────────────────────────────────────────────────────────

@@ -74,6 +74,18 @@ public interface AppConstants {
     String REDIS_WS_RELAY_PREFIX      = "ws:notifications:";
     // Full key: ws:notifications:{userId}
 
+    // ── Cache Names ───────────────────────────────────────────────────────────
+    // WHY CONSTANTS NOT STRING LITERALS:
+    //   @Cacheable("stores") ← string literal: typo "storez" = wrong cache used
+    //   @Cacheable(AppConstants.CACHE_STORES) ← compile error on typo
+    //   Constants: refactor-safe, IDE autocomplete, consistent naming.
+
+    String CACHE_STORES       = "stores";
+    String CACHE_STORE_STATUS = "storeStatus";
+    String CACHE_PRODUCTS     = "products";
+    String CACHE_CATEGORIES   = "categories";
+    String CACHE_TRENDING     = "trending";
+
     // ── Security ──────────────────────────────────────────────────────────────
     int    OTP_LENGTH                 = 6;
     int    OTP_EXPIRY_SECONDS         = 300;      // 5 minutes

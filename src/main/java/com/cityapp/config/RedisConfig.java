@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cache.annotation.CachingConfigurer;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -73,8 +76,9 @@ import java.util.Map;
  *   Expiries are spread over 60 seconds.
  *   At most 17 cache misses per second → easily absorbed.
  */
+@Slf4j
 @Configuration
-public class RedisConfig {
+public class RedisConfig implements CachingConfigurer {
 
     /**
      * The ObjectMapper configured for Redis serialisation.
@@ -224,6 +228,62 @@ public class RedisConfig {
     }
 
     /**
+     * Graceful cache degradation when Redis is unavailable.
+     *
+     * WITHOUT THIS:
+     *   Redis goes down (rolling deploy, network blip, OOM).
+     *   @Cacheable method throws RedisConnectionException.
+     *   Every GET /stores/{id} returns 500 Internal Server Error.
+     *   The store data is perfectly fine in PostgreSQL.
+     *   But users can't access it. App is "down" because of a cache failure.
+     *
+     * WITH THIS:
+     *   Redis goes down.
+     *   CacheErrorHandler.handleCacheGetError() logs a warning.
+     *   Returns null → treated as cache miss.
+     *   @Cacheable method falls through to the actual DB query.
+     *   App is slower (DB queries for every request) but FUNCTIONAL.
+     *   Cache is a performance optimisation, not a correctness requirement.
+     *   The system degrades gracefully.
+     *
+     * This is the RESILIENCE principle applied to caching:
+     *   "Assume dependencies will fail. Design for failure."
+     */
+    @Bean
+    public org.springframework.cache.interceptor.CacheErrorHandler cacheErrorHandler() {
+        return new org.springframework.cache.interceptor.SimpleCacheErrorHandler() {
+            @Override
+            public void handleCacheGetError(RuntimeException ex,
+                                            org.springframework.cache.Cache cache, Object key) {
+                log.warn("Cache GET error: cache={} key={}: {}",
+                        cache.getName(), key, ex.getMessage());
+                // Don't rethrow. Return null = cache miss. Fall through to DB.
+            }
+
+            @Override
+            public void handleCachePutError(RuntimeException ex,
+                                            org.springframework.cache.Cache cache,
+                                            Object key, Object value) {
+                log.warn("Cache PUT error: cache={} key={}: {}",
+                        cache.getName(), key, ex.getMessage());
+                // Don't rethrow. Data was fetched from DB. Just not cached.
+                // Next request: cache miss again → fetch from DB again.
+            }
+
+            @Override
+            public void handleCacheEvictError(RuntimeException ex,
+                                              org.springframework.cache.Cache cache, Object key) {
+                log.error("Cache EVICT error: cache={} key={}: {}",
+                        cache.getName(), key, ex.getMessage());
+                // This is more serious: data was written to DB but cache not evicted.
+                // Stale data will be served until TTL expires.
+                // Log at ERROR. Alert on this in production.
+            }
+        };
+    }
+
+
+    /**
      * Adds random jitter to a TTL to prevent cache stampede.
      *
      * Example with 5-minute base:
@@ -238,4 +298,10 @@ public class RedisConfig {
         long jitterMs = (long) (base.toMillis() * 0.2 * Math.random());
         return base.plusMillis(jitterMs);
     }
+
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return cacheErrorHandler();
+    }
+
 }

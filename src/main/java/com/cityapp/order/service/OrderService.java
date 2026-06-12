@@ -354,6 +354,21 @@ public class OrderService {
 
     // ── Queries ────────────────────────────────────────────────────────────────
 
+    /**
+     * INTENTIONALLY NOT CACHED.
+     *
+     * WHY:
+     *   Buyers check order status frequently: "has my order been prepared yet?"
+     *   The status changes in real-time: CONFIRMED → PREPARING → READY → OUT_FOR_DELIVERY
+     *   If cached: buyer sees CONFIRMED status for 5 minutes after seller marks PREPARING.
+     *   "Why is my order still showing CONFIRMED? The seller said it's ready!"
+     *
+     *   Orders are LOW READ frequency (each user has few orders, checks status occasionally)
+     *   but HIGH UPDATE frequency (status changes multiple times).
+     *   CACHING RULE: Cache high-read, low-update data.
+     *                 Don't cache low-read, high-update data.
+     *   Orders: borderline. The status update frequency makes caching harmful.
+     */
     @Transactional(readOnly = true)
     public OrderResponse getOrder(Long orderId, Long userId) {
         Order order = orderRepository.findByIdAndUserId(orderId, userId)
