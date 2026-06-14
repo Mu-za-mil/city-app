@@ -2,6 +2,8 @@ package com.cityapp.user.service;
 
 import com.cityapp.auth.entity.RefreshToken;
 import com.cityapp.auth.service.RefreshTokenService;
+import com.cityapp.common.event.EventPublisher;
+import com.cityapp.common.event.UserRegisteredEvent;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.security.service.JwtService;
@@ -69,6 +71,7 @@ public class UserService implements UserDetailsService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final EventPublisher eventPublisher;
     // PasswordEncoder is a Spring Security bean defined in SecurityConfig (Phase 4).
     // We declare the dependency here. Spring will inject it.
     // This creates a chicken-and-egg situation: UserService needs SecurityConfig.
@@ -111,6 +114,17 @@ public class UserService implements UserDetailsService {
         user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
 
         User saved = userRepository.save(user);
+
+        eventPublisher.publishUserRegistered(
+                UserRegisteredEvent.builder()
+                        .eventId(EventPublisher.generateEventId())
+                        .userId(saved.getId())
+                        .email(saved.getEmail())
+                        .name(saved.getName())
+                        .phone(saved.getPhone())
+                        .role(saved.getRole())
+                        .registeredAt(saved.getCreatedAt())
+                        .build());
 
         log.info("User registered: id={} email={} role={}",
                 saved.getId(), saved.getEmail(), saved.getRole());

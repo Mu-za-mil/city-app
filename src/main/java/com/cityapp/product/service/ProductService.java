@@ -2,6 +2,8 @@ package com.cityapp.product.service;
 
 import com.cityapp.category.repository.CategoryRepository;
 import com.cityapp.common.constants.AppConstants;
+import com.cityapp.common.event.EventPublisher;
+import com.cityapp.common.event.InventoryLowEvent;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.product.dto.CreateProductRequest;
@@ -29,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -43,6 +46,8 @@ public class ProductService {
     private final StoreRepository     storeRepository;
     private final CategoryRepository  categoryRepository;
     private final ProductMapper       productMapper;
+    private final EventPublisher eventPublisher;
+
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -248,6 +253,27 @@ public class ProductService {
 
         inv.setQuantity(inv.getQuantity() - quantity);
         inventoryRepository.save(inv);
+
+        // Check if stock is now below threshold
+        if (inv.getQuantity() <= inv.getLowStockThreshold()) {
+            // Deduplication: publish at most once per hour per product
+            // The consumer (InventoryEventConsumer) also deduplicates.
+            // Double deduplication: once at source, once at consumer.
+            // Belt and suspenders. Prevents event bus flooding.
+            eventPublisher.publishInventoryLow(
+                    InventoryLowEvent.builder()
+                            .eventId(EventPublisher.generateEventId())
+                            .productId(inv.getProduct().getId())
+                            .productName(inv.getProduct().getName())
+                            .storeId(inv.getProduct().getStore().getId())
+                            .sellerId(inv.getProduct().getStore().getOwner().getId())
+                            .currentQuantity(inv.getQuantity())
+                            .threshold(inv.getLowStockThreshold())
+                            .timestamp(Instant.now())
+                            .build());
+        }
+
+
         log.debug("Stock deducted: productId={} qty={} remaining={}",
                 productId, quantity, inv.getQuantity());
         return true;
