@@ -43,3 +43,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Firebase credentials
+firebase-credentials.json
+
