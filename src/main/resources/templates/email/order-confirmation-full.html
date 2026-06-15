@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Order Confirmed</title>
+    <style>
+        body { margin:0; padding:0; font-family:'Segoe UI',Arial,sans-serif;
+            background:#f5f5f5; }
+        .container { max-width:600px; margin:30px auto; background:#fff;
+            border-radius:12px; overflow:hidden;
+            box-shadow:0 4px 20px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg,#22c55e,#16a34a);
+            padding:32px; text-align:center; }
+        .header h1 { color:#fff; margin:0; font-size:24px; }
+        .header p  { color:rgba(255,255,255,0.9); margin:6px 0 0; }
+        .content { padding:32px; }
+        .order-meta { background:#f0fdf4; border-left:4px solid #22c55e;
+            padding:16px; border-radius:0 8px 8px 0; margin-bottom:24px; }
+        .order-meta strong { display:block; font-size:18px; color:#166534; }
+        .order-meta span   { color:#15803d; }
+        .section-title { font-size:14px; font-weight:700; color:#999;
+            text-transform:uppercase; letter-spacing:1px;
+            margin:24px 0 12px; }
+        .items-table { width:100%; border-collapse:collapse; }
+        .items-table th { background:#f8f8f8; padding:10px 12px;
+            text-align:left; font-size:13px; color:#666; }
+        .items-table td { padding:12px; border-bottom:1px solid #f0f0f0;
+            font-size:14px; }
+        .items-table .amount { text-align:right; }
+        .total-row td { font-weight:700; font-size:16px; padding-top:16px; }
+        .total-row .amount { color:#FF6B00; }
+        .delivery-box { background:#f9fafb; border-radius:8px; padding:16px;
+            margin:20px 0; }
+        .delivery-box strong { display:block; margin-bottom:4px; }
+        .cta-btn { display:inline-block; background:#FF6B00; color:#fff;
+            text-decoration:none; padding:12px 28px; border-radius:8px;
+            font-weight:600; margin:20px 0; }
+        .footer { background:#f8f8f8; padding:16px 32px; text-align:center;
+            color:#999; font-size:12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <div style="font-size:40px;">✅</div>
+        <h1>Order Confirmed!</h1>
+        <p th:text="${storeName}">Chennai Fresh Mart</p>
+    </div>
+
+    <div class="content">
+        <p>Hi <strong th:text="${userName}">there</strong>,</p>
+        <p>Your order has been confirmed and the store will prepare it shortly.</p>
+
+        <div class="order-meta">
+            <strong>Order #<span th:text="${orderId}">1001</span></strong>
+            <span th:text="${orderDate}">15 Jan 2025, 09:30 AM</span>
+        </div>
+
+        <div class="section-title">Order Items</div>
+
+        <table class="items-table">
+            <thead>
+            <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th class="amount">Price</th>
+                <th class="amount">Subtotal</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="item : ${items}">
+                <td th:text="${item.productName}">Ponni Rice</td>
+                <td th:text="${item.quantity}">2</td>
+                <td class="amount">
+                    ₹<span th:text="${#numbers.formatDecimal(item.unitPrice, 1, 2)}">189.00</span>
+                </td>
+                <td class="amount">
+                    ₹<span th:text="${#numbers.formatDecimal(
+                            item.unitPrice.multiply(java.math.BigDecimal.valueOf(item.quantity)), 1, 2)}">
+                            378.00
+                        </span>
+                </td>
+            </tr>
+            <tr class="total-row">
+                <td colspan="3"><strong>Total</strong></td>
+                <td class="amount">
+                    ₹<span th:text="${#numbers.formatDecimal(totalAmount, 1, 2)}">378.00</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div th:if="${orderType == 'DELIVERY'}" class="delivery-box">
+            <div class="section-title" style="margin-top:0;">Delivery Address</div>
+            <strong>📍</strong>
+            <span th:text="${deliveryAddress}">123 T.Nagar, Chennai 600017</span>
+        </div>
+
+        <div th:if="${orderType == 'TAKEAWAY'}" class="delivery-box">
+            <strong>🏪 Takeaway</strong>
+            Pick up your order from <span th:text="${storeName}">the store</span> when ready.
+        </div>
+
+        <a href="https://cityapp.com/orders" class="cta-btn">Track Order →</a>
+
+        <p style="color:#666; font-size:14px;">
+            Questions? Reply to this email or contact us at
+            <a href="mailto:support@cityapp.com" style="color:#FF6B00;">support@cityapp.com</a>
+        </p>
+    </div>
+
+    <div class="footer">
+        <p>© <span th:text="${year}">2025</span> City App. All rights reserved.</p>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Low Stock Alert</title>
+    <style>
+        body { margin:0; padding:0; font-family:'Segoe UI',Arial,sans-serif;
+            background:#f5f5f5; }
+        .container { max-width:600px; margin:30px auto; background:#fff;
+            border-radius:12px; overflow:hidden;
+            box-shadow:0 4px 20px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg,#f59e0b,#d97706);
+            padding:32px; text-align:center; }
+        .header h1 { color:#fff; margin:0; font-size:22px; }
+        .content { padding:32px; }
+        .alert-box { background:#fff7ed; border:2px solid #f59e0b;
+            border-radius:10px; padding:20px; margin:20px 0;
+            text-align:center; }
+        .qty-badge { font-size:48px; font-weight:800; color:#d97706;
+            display:block; }
+        .cta-btn { display:inline-block; background:#f59e0b; color:#fff;
+            text-decoration:none; padding:12px 28px; border-radius:8px;
+            font-weight:600; }
+        .footer { background:#f8f8f8; padding:16px; text-align:center;
+            color:#999; font-size:12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div style="font-size:36px;">⚠️</div>
+        <h1>Low Stock Alert</h1>
+    </div>
+    <div class="content">
+        <p>Hi <strong th:text="${sellerName}">Seller</strong>,</p>
+        <p>One of your products is running low on stock:</p>
+
+        <div class="alert-box">
+            <strong th:text="${productName}" style="font-size:20px;">Ponni Rice</strong>
+            <span class="qty-badge" th:text="${currentQuantity}">4</span>
+            <span style="color:#92400e;">units remaining</span>
+        </div>
+
+        <p>Restock soon to avoid missing orders from your customers.</p>
+
+        <a href="https://cityapp.com/seller/inventory" class="cta-btn">
+            Update Inventory →
+        </a>
+    </div>
+    <div class="footer">
+        <p>© <span th:text="${year}">2025</span> City App</p>
+    </div>
+</div>
+</body>
+</html>

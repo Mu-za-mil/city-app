@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to City App</title>
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #f5f5f5; color: #333; }
+        .container { max-width: 600px; margin: 30px auto; background: #fff;
+            border-radius: 12px; overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .header { background: linear-gradient(135deg, #FF6B00, #FF8C42);
+            padding: 40px 30px; text-align: center; }
+        .header h1 { color: white; margin: 0; font-size: 28px; }
+        .header p  { color: rgba(255,255,255,0.9); margin: 8px 0 0; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 22px; font-weight: 600; color: #333; }
+        .message  { color: #666; line-height: 1.8; margin: 16px 0; }
+        .cta-btn  { display: inline-block; background: #FF6B00; color: white;
+            text-decoration: none; padding: 14px 32px; border-radius: 8px;
+            font-weight: 600; font-size: 16px; margin: 20px 0; }
+        .features { background: #FFF8F3; border-radius: 8px; padding: 24px;
+            margin: 24px 0; }
+        .feature  { display: flex; align-items: flex-start; margin-bottom: 16px; }
+        .feature-icon { font-size: 24px; margin-right: 12px; }
+        .feature-text h4 { margin: 0; color: #333; }
+        .feature-text p  { margin: 4px 0 0; color: #666; font-size: 14px; }
+        .footer { background: #f8f8f8; padding: 20px 30px; text-align: center;
+            color: #999; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🏪 City App</h1>
+        <p>Your hyperlocal marketplace</p>
+    </div>
+
+    <div class="content">
+        <div class="greeting">Hi <span th:text="${userName}">there</span>! 👋</div>
+
+        <p class="message">
+            Welcome to City App — your gateway to the best local stores in your city.
+            Everything you need, delivered to your door.
+        </p>
+
+        <a href="https://cityapp.com" class="cta-btn">Start Shopping →</a>
+
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">🛒</div>
+                <div class="feature-text">
+                    <h4>Shop from local stores</h4>
+                    <p>Groceries, electronics, food, pharmacy — all nearby</p>
+                </div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🚀</div>
+                <div class="feature-text">
+                    <h4>Fast delivery</h4>
+                    <p>Live tracking on every order. Know exactly where your delivery is.</p>
+                </div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">💰</div>
+                <div class="feature-text">
+                    <h4>Best local prices</h4>
+                    <p>No markup over store prices. Support your local businesses.</p>
+                </div>
+            </div>
+        </div>
+
+        <p class="message">
+            Have questions? Reach us at
+            <a href="mailto:support@cityapp.com" style="color: #FF6B00;">
+                support@cityapp.com
+            </a>
+        </p>
+    </div>
+
+    <div class="footer">
+        <p>© <span th:text="${year}">2025</span> City App. All rights reserved.</p>
+        <p>You're receiving this because you created a City App account.</p>
+    </div>
+</div>
+</body>
+</html>
