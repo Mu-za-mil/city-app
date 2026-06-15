@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
+
 /**
  * Handles all notification delivery: email, push, in-app, WebSocket.
  * Called by Kafka consumers.
@@ -27,39 +29,117 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final EmailService           emailService;
+    private final FcmService             fcmService;
 
     // ── Order Notifications ───────────────────────────────────────────────────
 
-    public void sendOrderCreatedPush(OrderCreatedEvent event) {
-        // Phase 12: FCM push notification implementation
-        log.info("Push notification (TODO Phase 12): " +
-                        "Order #{} confirmed for userId={}",
-                event.getOrderId(), event.getUserId());
+    public void sendOrderConfirmationEmail(OrderCreatedEvent event) {
+        try {
+            emailService.sendOrderConfirmation(
+                    event.getUserId(), event.getOrderId(),
+                    event.getTotalAmount());
+        } catch (Exception e) {
+            log.error("Failed to send order confirmation email: orderId={} error={}",
+                    event.getOrderId(), e.getMessage());
+            // Don't rethrow: email failure should not cause Kafka retry.
+        }
     }
 
+    public void sendOrderCreatedPush(OrderCreatedEvent event) {
+        // Push to buyer's devices
+        fcmService.sendToUser(
+                event.getUserId(),
+                "Order Confirmed! ✅",
+                "Your order from " + event.getStoreName() +
+                        " — ₹" + event.getTotalAmount() + " is confirmed.",
+                Map.of(
+                        "type",    "ORDER_CONFIRMED",
+                        "orderId", String.valueOf(event.getOrderId())
+                )
+        );
+    }
+
+
     public void sendNewOrderAlertToSeller(OrderCreatedEvent event) {
-        // Notify the seller: new order arrived
-        log.info("Seller alert: new order #{} at store {}",
-                event.getOrderId(), event.getStoreName());
+        // Push to seller's devices
+        fcmService.sendToUser(
+                event.getSellerId(),
+                "New Order! 🛒",
+                "Order #" + event.getOrderId() +
+                        " — ₹" + event.getTotalAmount() + " is waiting.",
+                Map.of(
+                        "type",    "NEW_ORDER",
+                        "orderId", String.valueOf(event.getOrderId())
+                )
+        );
+
         createInAppNotification(
                 event.getSellerId(),
-                "New Order Received!",
-                "Order #" + event.getOrderId() + " - ₹" +
-                        event.getTotalAmount() + " is waiting for your confirmation.",
+                "New Order Received! 🛒",
+                "Order #" + event.getOrderId() + " — ₹" +
+                        event.getTotalAmount() + " is waiting for your action.",
                 "ORDER", event.getOrderId()
         );
     }
 
     public void sendStatusChangePush(Long userId, String title,
                                      String message, Long orderId) {
-        log.info("Status push (TODO Phase 12): userId={} title='{}'", userId, title);
+        fcmService.sendToUser(
+                userId,
+                title,
+                message,
+                Map.of("type", "ORDER_STATUS", "orderId", String.valueOf(orderId))
+        );
     }
 
+    // ── User Notifications ────────────────────────────────────────────────────
+
+    public void sendWelcomeEmail(UserRegisteredEvent event) {
+        try {
+            emailService.sendWelcomeEmail(event.getEmail(), event.getName());
+        } catch (Exception e) {
+            log.error("Failed to send welcome email: userId={} error={}",
+                    event.getUserId(), e.getMessage());
+        }
+    }
 
     public void sendSellerOnboardingEmail(UserRegisteredEvent event) {
-        log.info("Seller onboarding email (TODO): userId={}", event.getUserId());
+        emailService.sendSellerOnboardingEmail(event.getEmail(), event.getName());
     }
 
+    // ── Inventory Notifications ───────────────────────────────────────────────
+
+    public void sendLowStockAlert(InventoryLowEvent event) {
+        // Push to seller
+        fcmService.sendToUser(
+                event.getSellerId(),
+                "⚠️ Low Stock Alert",
+                "'" + event.getProductName() + "' — only " +
+                        event.getCurrentQuantity() + " units left!",
+                Map.of(
+                        "type",      "LOW_STOCK",
+                        "productId", String.valueOf(event.getProductId())
+                )
+        );
+
+        // Email to seller
+        emailService.sendLowStockEmail(
+                event.getSellerId(),
+                event.getProductName(),
+                event.getCurrentQuantity()
+        );
+
+        // In-app notification
+        createInAppNotification(
+                event.getSellerId(),
+                "⚠️ Low Stock: " + event.getProductName(),
+                "Only " + event.getCurrentQuantity() + " units remaining " +
+                        "(threshold: " + event.getThreshold() + "). Restock soon!",
+                "INVENTORY",
+                event.getProductId()
+        );
+    }
 
     // ── In-App Notifications ──────────────────────────────────────────────────
 
@@ -79,6 +159,5 @@ public class NotificationService {
         notificationRepository.save(notification);
         log.debug("In-app notification created: userId={} title='{}'", userId, title);
 
-        // Phase 11: WebSocket push to connected buyers (real-time notification bell)
     }
 }
