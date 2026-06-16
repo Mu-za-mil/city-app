@@ -45,5 +45,5 @@ Thumbs.db
 logs/
 
 # Firebase credentials
-firebase-credentials.json
+src/main/resources/firebase-credentials.json
 
