@@ -37,7 +37,7 @@ import java.io.InputStream;
 @Configuration
 public class FirebaseConfig {
 
-    @Value("${app.fcm.credentials-path:}")
+    @Value("${cityapp.fcm.credentials-path:}")
     private String credentialsPath;
 
     @Bean
