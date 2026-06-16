@@ -5,6 +5,7 @@ import com.cityapp.notification.repository.DeviceTokenRepository;
 import com.google.firebase.messaging.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -43,13 +44,23 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class FcmService {
 
     private final DeviceTokenRepository deviceTokenRepository;
     private final FirebaseMessaging     firebaseMessaging;
+
+    @Autowired(required = false)   // optional
+    public FcmService(DeviceTokenRepository deviceTokenRepository,
+                      FirebaseMessaging firebaseMessaging) {
+        this.deviceTokenRepository = deviceTokenRepository;
+        this.firebaseMessaging = firebaseMessaging;
+        if (this.firebaseMessaging == null) {
+            log.warn("FirebaseMessaging bean is null – FCM push notifications disabled");
+        }
+    }
     // Spring injects null here if FirebaseConfig returned null.
     // We null-check before every FCM call.
+
 
     /**
      * Send a push notification to ALL devices registered to a user.
