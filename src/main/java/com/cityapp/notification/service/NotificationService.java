@@ -36,9 +36,7 @@ public class NotificationService {
 
     public void sendOrderConfirmationEmail(OrderCreatedEvent event) {
         try {
-            emailService.sendOrderConfirmation(
-                    event.getUserId(), event.getOrderId(),
-                    event.getTotalAmount());
+            emailService.sendOrderConfirmationFull(event);
         } catch (Exception e) {
             log.error("Failed to send order confirmation email: orderId={} error={}",
                     event.getOrderId(), e.getMessage());

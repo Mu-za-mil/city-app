@@ -76,10 +76,8 @@
                     ₹<span th:text="${#numbers.formatDecimal(item.unitPrice, 1, 2)}">189.00</span>
                 </td>
                 <td class="amount">
-                    ₹<span th:text="${#numbers.formatDecimal(
-                            item.unitPrice.multiply(java.math.BigDecimal.valueOf(item.quantity)), 1, 2)}">
-                            378.00
-                        </span>
+                    ₹<span th:text="${#numbers.formatDecimal(item.unitPrice * item.quantity, 1, 2)}">
+                </span>
                 </td>
             </tr>
             <tr class="total-row">
