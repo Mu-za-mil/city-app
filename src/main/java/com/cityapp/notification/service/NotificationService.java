@@ -139,6 +139,28 @@ public class NotificationService {
         );
     }
 
+    // ── Delivery Notifications ────────────────────────────────────────────────
+
+    public void sendDeliveryAssignedNotifications(DeliveryAssignedEvent event) {
+        // Push to buyer
+        fcmService.sendToUser(
+                event.getBuyerId(),
+                "Delivery Partner Assigned 🏍️",
+                event.getPartnerName() + " is heading to the store to pick up your order.",
+                Map.of("type", "DELIVERY_ASSIGNED",
+                        "orderId", String.valueOf(event.getOrderId()))
+        );
+
+        // In-app for buyer
+        createInAppNotification(
+                event.getBuyerId(),
+                "Delivery Partner On The Way!",
+                event.getPartnerName() + " is picking up your order.",
+                "DELIVERY",
+                event.getOrderId()
+        );
+    }
+
     // ── In-App Notifications ──────────────────────────────────────────────────
 
     @Transactional
