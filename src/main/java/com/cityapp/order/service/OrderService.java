@@ -6,14 +6,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import com.cityapp.common.event.EventPublisher;
-import com.cityapp.common.event.OrderCreatedEvent;
-import com.cityapp.common.event.OrderStatusChangedEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cityapp.common.event.EventPublisher;
+import com.cityapp.common.event.InventoryLowEvent;
+import com.cityapp.common.event.OrderCreatedEvent;
+import com.cityapp.common.event.OrderStatusChangedEvent;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.order.dto.OrderItemRequest;
@@ -249,6 +250,22 @@ public class OrderService {
             rec.inventory().setQuantity(
                     rec.inventory().getQuantity() - rec.quantity());
             inventoryRepository.save(rec.inventory());
+
+            // If stock falls below or equal to threshold, publish low-stock event
+            if (rec.inventory().getQuantity() <= rec.inventory().getLowStockThreshold()) {
+                eventPublisher.publishInventoryLow(
+                        InventoryLowEvent.builder()
+                                .eventId(EventPublisher.generateEventId())
+                                .productId(rec.inventory().getProduct().getId())
+                                .productName(rec.inventory().getProduct().getName())
+                                .storeId(rec.inventory().getProduct().getStore().getId())
+                                .sellerId(rec.inventory().getProduct().getStore().getOwner().getId())
+                                .currentQuantity(rec.inventory().getQuantity())
+                                .threshold(rec.inventory().getLowStockThreshold())
+                                .timestamp(Instant.now())
+                                .build());
+            }
+
             log.debug("Inventory deducted: productId={} qty={} remaining={}",
                     rec.inventory().getProduct().getId(),
                     rec.quantity(),

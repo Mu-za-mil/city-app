@@ -67,11 +67,9 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
-        spring.json.add.type.headers: false
-        # WHY false: don't add "@class": "com.cityapp.order.event.OrderCreatedEvent"
-        # to Kafka message headers. If notification-service is in a different
-        # Maven module with a different class path, deserialisation fails.
-        # Use explicit type mapping instead.
+        spring.json.add.type.headers: true
+        # WHY true: include the message type in Kafka headers so consumers
+        # can deserialize JSON into the correct event class.
         acks: all
         # WHY all: wait for ALL in-sync replicas to acknowledge.
         # Without this: leader broker confirms → immediately crashes
@@ -90,6 +88,8 @@ spring:
       # Manual: message fetched → processed → THEN commit offset
       #         → if processing fails → message redelivered.
       properties:
+        spring.json.use.type.headers: true
+        spring.json.value.default.type: "com.cityapp.common.event.UserRegisteredEvent"
         spring.json.trusted.packages: "com.cityapp.*"
 
   # ── MAIL ────────────────────────────────────────────────────────────────
@@ -131,6 +131,8 @@ cityapp:
   websocket:
       redis-relay-enabled: ${WEBSOCKET_REDIS_RELAY:false}
 
+  fcm:
+    credentials-path: classpath:firebase-credentials.json
 # ── ACTUATOR ─────────────────────────────────────────────────────────────────
 management:
     endpoints:
