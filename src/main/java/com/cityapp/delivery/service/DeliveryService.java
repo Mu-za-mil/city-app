@@ -100,6 +100,96 @@ public class DeliveryService {
         return toPartnerResponse(partnerRepository.save(partner));
     }
 
+    // ── Assignment ────────────────────────────────────────────────────────────
+
+    /**
+     * Assign the nearest available partner to an order.
+     *
+     * ASSIGNMENT STRATEGY:
+     *   Find all ACTIVE partners within 10km of the store.
+     *   Sort by distance (nearest first) using PostGIS <-> operator.
+     *   Assign the nearest one.
+     *
+     *   WHY NOT AUTO-ASSIGN IN OrderService:
+     *   OrderService creates the order. DeliveryService assigns partners.
+     *   Single Responsibility Principle: each service has one job.
+     *   Also: assignment can be triggered manually (admin) or automatically (Saga).
+     *
+     *   PRODUCTION CONSIDERATION:
+     *   In practice: ask the nearest partner to accept (not force-assign).
+     *   If partner doesn't accept within 30 seconds: try the next nearest.
+     *   For Phase 11: direct assignment. "Accept/reject" flow in Phase 15+.
+     */
+    @Transactional
+    public DeliveryAssignmentResponse assignPartner(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> AppException.notFound("Order not found"));
+
+        if (order.getStatus() != OrderStatus.CONFIRMED
+                && order.getStatus() != OrderStatus.READY) {
+            throw AppException.badRequest(
+                    "Cannot assign delivery for order in status: " +
+                            order.getStatus());
+        }
+
+        if (assignmentRepository.findByOrderId(orderId).isPresent()) {
+            throw AppException.conflict("Order already has a delivery assignment");
+        }
+
+        Double storeLat = order.getStore().getLatitude();
+        Double storeLng = order.getStore().getLongitude();
+
+        if (storeLat == null || storeLng == null) {
+            throw AppException.badRequest(
+                    "Store has no GPS coordinates. Cannot find nearby partners.");
+        }
+
+        // Find nearest available partners
+        double radiusMeters = ASSIGNMENT_RADIUS_KM * METERS_PER_KM;
+        List<DeliveryPartner> candidates = partnerRepository
+                .findAvailableNearStore(storeLat, storeLng, radiusMeters, 5);
+
+        if (candidates.isEmpty()) {
+            throw AppException.badRequest(
+                    "No delivery partners available within " +
+                            ASSIGNMENT_RADIUS_KM + "km of this store. " +
+                            "Try again in a few minutes.");
+        }
+
+        // Assign the nearest available partner
+        DeliveryPartner partner = candidates.get(0);
+
+        DeliveryAssignment assignment = DeliveryAssignment.builder()
+                .order(order)
+                .partner(partner)
+                .status(DeliveryAssignment.AssignmentStatus.ASSIGNED)
+                .build();
+
+        DeliveryAssignment saved = assignmentRepository.save(assignment);
+
+        // Update order status
+        order.setStatus(OrderStatus.OUT_FOR_DELIVERY);
+        orderRepository.save(order);
+
+        // Publish event (notifies buyer + partner via Kafka → notification-service)
+        eventPublisher.publishDeliveryAssigned(
+                DeliveryAssignedEvent.builder()
+                        .eventId(EventPublisher.generateEventId())
+                        .orderId(orderId)
+                        .partnerId(partner.getId())
+                        .partnerName(partner.getUser().getName())
+                        .partnerPhone(partner.getUser().getPhone())
+                        .storeId(order.getStore().getId())
+                        .buyerId(order.getUser().getId())
+                        .assignedAt(Instant.now())
+                        .build());
+
+        log.info("Delivery assigned: orderId={} partnerId={} partnerName={}",
+                orderId, partner.getId(), partner.getUser().getName());
+
+        return toAssignmentResponse(saved);
+    }
+
     // ── Private Helpers ───────────────────────────────────────────────────────
 
     private DeliveryPartner findPartnerOrThrow(Long partnerId) {
