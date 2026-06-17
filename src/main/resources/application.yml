@@ -91,6 +91,28 @@ spring:
         spring.json.use.type.headers: true
         spring.json.value.default.type: "com.cityapp.common.event.UserRegisteredEvent"
         spring.json.trusted.packages: "com.cityapp.*"
+        # SAGA SPECIFIC:
+        max.poll.records: 10
+          # max.poll.records: 10 events per poll for saga consumers.
+          # WHY LOW: Saga consumers hold DB locks (SELECT FOR UPDATE).
+          # Processing 100 events at once = 100 concurrent lock acquisitions.
+          # Small batch = controlled lock pressure.
+
+        listener:
+            # Ack mode: MANUAL_IMMEDIATE — commit offset only after processing.
+            # WHY NOT AUTO: Auto-commit commits offset before we finish processing.
+            # Consumer crashes after auto-commit but before completing:
+            # Message is lost (offset already committed).
+            # MANUAL_IMMEDIATE: commit offset explicitly after processing.
+            # If we forget to commit: message re-delivered on restart. Safe.
+            ack-mode: BATCH
+            # BATCH: commit after each batch is fully processed.
+            # Simpler than MANUAL_IMMEDIATE. Slightly less granular.
+            # For our saga consumers: batch of events, commit when all processed.
+            concurrency: 3
+            # 3 concurrent listener threads per topic.
+            # Matches our 3 partitions per topic.
+            # Each thread handles one partition. Maximum parallelism.
 
   # ── MAIL ────────────────────────────────────────────────────────────────
   mail:
