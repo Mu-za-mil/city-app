@@ -46,4 +46,26 @@ public class DeliveryController {
                 deliveryService.goOffline(user.getId())));
     }
 
+    // ── Location Updates (from partner's app) ─────────────────────────────────
+
+    @PostMapping("/{orderId}/location")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    public ResponseEntity<ApiResponse<Void>> updateLocation(
+            @AuthenticationPrincipal User partner,
+            @PathVariable Long orderId,
+            @Valid @RequestBody UpdateLocationRequest req) {
+
+        deliveryService.updateLocation(partner.getId(), orderId, req);
+        return ResponseEntity.ok(ApiResponse.ok("Location updated"));
+    }
+
+    // ── Buyer: get current location ───────────────────────────────────────────
+
+    @GetMapping("/{orderId}/location")
+    public ResponseEntity<ApiResponse<LocationDto>> getLocation(
+            @PathVariable Long orderId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                deliveryService.getCurrentLocation(orderId)));
+    }
+
 }

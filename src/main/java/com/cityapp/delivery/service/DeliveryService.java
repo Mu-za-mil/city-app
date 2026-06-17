@@ -190,6 +190,135 @@ public class DeliveryService {
         return toAssignmentResponse(saved);
     }
 
+    // ── Location Updates (THE CRITICAL PERFORMANCE PATH) ──────────────────────
+
+    /**
+     * Updates partner's GPS location.
+     * Called by the partner's mobile app every 30 seconds.
+     *
+     * THREE-LAYER LOCATION STRATEGY:
+     *
+     * LAYER 1: Redis (always — every ping)
+     *   SET "delivery:location:{orderId}" {lat, lng, timestamp}
+     *   Sub-millisecond write. Always fresh.
+     *   Used for: GET /delivery/{orderId}/location (instant read)
+     *   Buyers polling (instead of WebSocket): fast Redis read, no DB.
+     *
+     * LAYER 2: WebSocket Push (always — every ping)
+     *   Push to buyer's WebSocket: "your partner just moved to (13.04, 80.23)"
+     *   Buyer's map marker updates in real-time.
+     *   No polling needed. Instant.
+     *
+     * LAYER 3: PostgreSQL (throttled — at most once per 30 seconds)
+     *   UPDATE delivery_partners SET current_location = ... WHERE id = ?
+     *   Used for: "where was partner X at time T?" (analytics, dispute resolution)
+     *
+     * WHY THROTTLE THE DB WRITE:
+     *   100 active deliveries × 2 pings/min = 200 DB writes/minute without throttle.
+     *   With throttle (once per 30 seconds): 200 → 100 DB writes/minute.
+     *   At 1000 active deliveries: 1000 → 500. Manageable.
+     *   Without throttle at 10,000 deliveries: 20,000 DB writes/minute.
+     *   Could overwhelm PostgreSQL connection pool.
+     *
+     * HOW THROTTLE WORKS (Redis SETNX):
+     *   SET "delivery:dbwrite:{partnerId}" "1" IF NOT EXISTS EXPIRE 30
+     *   First call: key doesn't exist → set it → DO the DB write.
+     *   Subsequent calls within 30 seconds: key exists → SKIP the DB write.
+     *   After 30 seconds: key expires → next call does the DB write again.
+     *   Zero code overhead. Redis handles the timing.
+     */
+    @Transactional
+    public void updateLocation(Long partnerId, Long orderId,
+                               UpdateLocationRequest req) {
+
+        // Verify assignment ownership
+        DeliveryAssignment assignment = assignmentRepository
+                .findByOrderIdAndPartnerId(orderId, partnerId)
+                .orElseThrow(() -> AppException.notFound(
+                        "No active assignment for orderId=" + orderId +
+                                " partnerId=" + partnerId));
+
+        if (assignment.getStatus() == DeliveryAssignment.AssignmentStatus.DELIVERED) {
+            throw AppException.badRequest("Delivery already completed");
+        }
+
+        // ── Layer 1: Redis (always) ───────────────────────────────────────────
+
+        LocationDto locationDto = LocationDto.builder()
+                .latitude(req.getLatitude())
+                .longitude(req.getLongitude())
+                .timestamp(Instant.now())
+                .partnerId(partnerId)
+                .partnerName(assignment.getPartner().getUser().getName())
+                .build();
+
+        String locationKey = AppConstants.REDIS_DELIVERY_LOCATION + orderId;
+        try {
+            redisTemplate.opsForValue().set(
+                    locationKey,
+                    req.getLatitude() + "," + req.getLongitude(),
+                    LOCATION_HISTORY_TTL,
+                    TimeUnit.SECONDS
+            );
+        } catch (Exception e) {
+            log.warn("Failed to write location to Redis: {}", e.getMessage());
+            // Non-critical: DB write still happens. Continue.
+        }
+
+        // ── Layer 2: WebSocket Push (always) ──────────────────────────────────
+
+        Long buyerUserId = assignment.getOrder().getUser().getId();
+        webSocketRelay.sendDeliveryLocation(buyerUserId, locationDto);
+
+        // ── Layer 3: PostgreSQL (throttled) ───────────────────────────────────
+
+        String dbWriteKey = AppConstants.REDIS_DELIVERY_DB_WRITE + partnerId;
+        Boolean shouldWrite = redisTemplate.opsForValue()
+                .setIfAbsent(dbWriteKey, "1",
+                        DB_WRITE_THROTTLE_SEC, TimeUnit.SECONDS);
+
+        if (Boolean.TRUE.equals(shouldWrite)) {
+            // This is the first ping in the last 30 seconds — do the DB write
+            DeliveryPartner partner = assignment.getPartner();
+            partner.setCurrentCoordinates(req.getLatitude(), req.getLongitude());
+            partnerRepository.save(partner);
+
+            log.debug("Location DB write: partnerId={} lat={} lng={}",
+                    partnerId, req.getLatitude(), req.getLongitude());
+        } else {
+            log.debug("Location DB write throttled for partnerId={}", partnerId);
+        }
+    }
+
+    /**
+     * Get current location of a delivery (from Redis — instant).
+     * Buyers poll this as a fallback if WebSocket is not supported.
+     */
+    public LocationDto getCurrentLocation(Long orderId) {
+        String key = AppConstants.REDIS_DELIVERY_LOCATION + orderId;
+        String cached = redisTemplate.opsForValue().get(key);
+
+        if (cached == null) {
+            // Not in Redis: check DB (partner may have been offline for > 1 hour)
+            return assignmentRepository.findByOrderId(orderId)
+                    .map(a -> LocationDto.builder()
+                            .latitude(a.getPartner().getCurrentLatitude())
+                            .longitude(a.getPartner().getCurrentLongitude())
+                            .partnerId(a.getPartner().getId())
+                            .partnerName(a.getPartner().getUser().getName())
+                            .build())
+                    .orElseThrow(() -> AppException.notFound(
+                            "No location data for order: " + orderId));
+        }
+
+        String[] parts = cached.split(",");
+        return LocationDto.builder()
+                .latitude(Double.parseDouble(parts[0]))
+                .longitude(Double.parseDouble(parts[1]))
+                .build();
+    }
+
+
     // ── Private Helpers ───────────────────────────────────────────────────────
 
     private DeliveryPartner findPartnerOrThrow(Long partnerId) {
