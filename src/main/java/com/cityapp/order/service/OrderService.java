@@ -6,15 +6,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.cityapp.common.constants.AppConstants;
+import com.cityapp.common.event.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.cityapp.common.event.EventPublisher;
-import com.cityapp.common.event.InventoryLowEvent;
-import com.cityapp.common.event.OrderCreatedEvent;
-import com.cityapp.common.event.OrderStatusChangedEvent;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.order.dto.OrderItemRequest;
@@ -52,6 +51,7 @@ public class OrderService {
     private final PaymentRepository paymentRepository;
     private final OrderMapper orderMapper;
     private final EventPublisher eventPublisher;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     // Minimum order amount in Indian Rupees
     private static final BigDecimal MINIMUM_ORDER_AMOUNT = BigDecimal.ONE;
@@ -208,105 +208,65 @@ public class OrderService {
         // Cascade saves OrderItems via Order
         orderRepository.save(savedOrder);
 
-        // ── Step 8: Validate and Deduct Inventory (Phase 1: Validate All) ─────
+        // ── Step 8: Publish Saga Command (replaces synchronous deduction) ──────────
 
-        List<DeductionRecord> deductions = new ArrayList<>();
+        /*
+         * SAGA DESIGN DECISION: Publish command AFTER order is saved.
+         *
+         * WHY AFTER (not before):
+         *   If we publish BEFORE saving the order:
+         *   InventoryService deducts stock immediately.
+         *   Order save fails (DB constraint, network error).
+         *   Stock is deducted. Order doesn't exist.
+         *   Inventory inconsistency.
+         *
+         *   AFTER: order exists in DB (CREATED status).
+         *   InventoryService deducts.
+         *   If order was already cancelled (race condition):
+         *   The SagaReplyConsumer checks: order is CANCELLED → ignore the deduction.
+         *   Stock deducted unnecessarily → SagaReplyConsumer should compensate.
+         *   (Full compensation logic in production: publish "restore.stock" command)
+         *
+         * WHY NOT INSIDE @Transactional:
+         *   Kafka publish is outside the DB transaction.
+         *   If publishing fails: order is CREATED but saga command never sent.
+         *   SagaTimeoutHandler catches this: order stuck in CREATED > 2min → CANCELLED.
+         *   Acceptable for now. Phase 17 Outbox fixes this completely.
+         */
 
-        for (OrderItemRequest itemReq : req.getItems()) {
-            /*
-             * SELECT FOR UPDATE: acquires a row-level lock on this inventory row.
-             * If another transaction holds the lock: this thread waits.
-             * When lock acquired: we read the CURRENT quantity (not stale).
-             *
-             * This prevents overselling:
-             * Thread A: quantity=1, acquires lock, reads 1
-             * Thread B: tries to acquire lock → WAITS
-             * Thread A: 1 >= requested 1 → deducts → quantity=0 → commits → releases lock
-             * Thread B: acquires lock, reads 0 → 0 < requested 1 → throws → rollback
-             * Result: one successful order, one rejected order. No overselling.
-             */
-            Inventory inv = inventoryRepository
-                    .findByProductIdForUpdate(itemReq.getProductId())
-                    .orElseThrow(() -> AppException.badRequest(
-                            "No inventory record for product: " +
-                                    itemReq.getProductId()));
-
-            if (inv.getQuantity() < itemReq.getQuantity()) {
-                throw AppException.badRequest(
-                        "Insufficient stock for product " +
-                                itemReq.getProductId() +
-                                ": available=" + inv.getQuantity() +
-                                " requested=" + itemReq.getQuantity());
-                // Transaction rolls back: NO inventory changes, order stays CREATED
-                // (but will be caught by SagaTimeoutHandler in Phase 10 and cancelled)
-            }
-
-            deductions.add(new DeductionRecord(inv, itemReq.getQuantity()));
-        }
-
-        // ── Phase 2: Deduct All (only if ALL validations passed) ──────────────
-
-        for (DeductionRecord rec : deductions) {
-            rec.inventory().setQuantity(
-                    rec.inventory().getQuantity() - rec.quantity());
-            inventoryRepository.save(rec.inventory());
-
-            // If stock falls below or equal to threshold, publish low-stock event
-            if (rec.inventory().getQuantity() <= rec.inventory().getLowStockThreshold()) {
-                eventPublisher.publishInventoryLow(
-                        InventoryLowEvent.builder()
-                                .eventId(EventPublisher.generateEventId())
-                                .productId(rec.inventory().getProduct().getId())
-                                .productName(rec.inventory().getProduct().getName())
-                                .storeId(rec.inventory().getProduct().getStore().getId())
-                                .sellerId(rec.inventory().getProduct().getStore().getOwner().getId())
-                                .currentQuantity(rec.inventory().getQuantity())
-                                .threshold(rec.inventory().getLowStockThreshold())
-                                .timestamp(Instant.now())
-                                .build());
-            }
-
-            log.debug("Inventory deducted: productId={} qty={} remaining={}",
-                    rec.inventory().getProduct().getId(),
-                    rec.quantity(),
-                    rec.inventory().getQuantity());
-        }
-
-        // ── Step 9: Advance to CONFIRMED ──────────────────────────────────────
-
-        savedOrder.setStatus(OrderStatus.CONFIRMED);
-        Order confirmedOrder = orderRepository.save(savedOrder);
-
-        log.info("Order confirmed: id={} total={}", confirmedOrder.getId(), total);
-
-        List<OrderCreatedEvent.OrderItemInfo> itemInfos = confirmedOrder.getItems()
-                .stream()
-                .map(item -> OrderCreatedEvent.OrderItemInfo.builder()
-                        .productId(item.getProduct().getId())
-                        .productName(item.getProductName())
+        List<PlaceOrderCommand.OrderItemSpec> itemSpecs = req.getItems().stream()
+                .map(item -> PlaceOrderCommand.OrderItemSpec.builder()
+                        .productId(item.getProductId())
                         .quantity(item.getQuantity())
                         .unitPrice(item.getUnitPrice())
                         .build())
                 .toList();
 
-        eventPublisher.publishOrderCreated(
-                OrderCreatedEvent.builder()
-                        .eventId(EventPublisher.generateEventId())
-                        .orderId(confirmedOrder.getId())
-                        .userId(buyer.getId())
-                        .sellerId(confirmedOrder.getStore().getOwner().getId())
-                        .storeId(confirmedOrder.getStore().getId())
-                        .storeName(confirmedOrder.getStore().getName())
-                        .orderType(confirmedOrder.getOrderType())
-                        .totalAmount(confirmedOrder.getTotalAmount())
-                        .deliveryAddress(confirmedOrder.getDeliveryAddress())
-                        .items(itemInfos)
-                        .timestamp(Instant.now())
-                        .build());
+        savedOrder.setSagaId(sagaId);
+        orderRepository.save(savedOrder);
 
-        // Phase 10 will replace steps 8-9 with async Saga
+        PlaceOrderCommand command = PlaceOrderCommand.builder()
+                .sagaId(sagaId)
+                .orderId(savedOrder.getId())
+                .userId(buyer.getId())
+                .storeId(req.getStoreId())
+                .items(itemSpecs)
+                .timestamp(Instant.now())
+                .build();
 
-        return buildOrderResponse(confirmedOrder);
+        kafkaTemplate.send(AppConstants.TOPIC_DEDUCT_STOCK,
+                String.valueOf(savedOrder.getId()), command);
+
+        log.info("Saga initiated: orderId={} sagaId={} items={}",
+                savedOrder.getId(), sagaId, itemSpecs.size());
+
+        /*
+         * IMPORTANT: We no longer advance to CONFIRMED here.
+         * The order stays CREATED.
+         * SagaReplyConsumer advances it to CONFIRMED after successful deduction.
+         * SagaTimeoutHandler cancels it if deduction doesn't happen within 2 minutes.
+         */
+        return buildOrderResponse(savedOrder);   // returns CREATED status
     }
 
     // ── Status Updates ────────────────────────────────────────────────────────
