@@ -68,4 +68,35 @@ public class DeliveryController {
                 deliveryService.getCurrentLocation(orderId)));
     }
 
+    // ── Admin: assign delivery partner ────────────────────────────────────────
+
+    @PostMapping("/{orderId}/assign")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SELLER')")
+    public ResponseEntity<ApiResponse<DeliveryAssignmentResponse>> assign(
+            @PathVariable Long orderId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                deliveryService.assignPartner(orderId)));
+    }
+
+    // ── Partner: mark delivered ───────────────────────────────────────────────
+
+    @PostMapping("/{orderId}/delivered")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    public ResponseEntity<ApiResponse<DeliveryAssignmentResponse>> markDelivered(
+            @AuthenticationPrincipal User partner,
+            @PathVariable Long orderId,
+            @RequestParam(required = false) String proofUrl) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                deliveryService.markDelivered(partner.getId(), orderId, proofUrl)));
+    }
+
+    // ── Admin ─────────────────────────────────────────────────────────────────
+
+    @PostMapping("/{partnerId}/approve")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<ApiResponse<DeliveryPartnerResponse>> approve(
+            @PathVariable Long partnerId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                deliveryService.approvePartner(partnerId)));
+    }
 }

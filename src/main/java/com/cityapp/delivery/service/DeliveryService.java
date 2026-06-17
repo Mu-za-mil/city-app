@@ -319,6 +319,40 @@ public class DeliveryService {
     }
 
 
+    // ── Delivery Completion ───────────────────────────────────────────────────
+
+    @Transactional
+    public DeliveryAssignmentResponse markDelivered(Long partnerId,
+                                                    Long orderId,
+                                                    String proofUrl) {
+        DeliveryAssignment assignment = assignmentRepository
+                .findByOrderIdAndPartnerId(orderId, partnerId)
+                .orElseThrow(() -> AppException.notFound(
+                        "Assignment not found for orderId=" + orderId));
+
+        assignment.setStatus(DeliveryAssignment.AssignmentStatus.DELIVERED);
+        assignment.setDeliveredAt(Instant.now());
+        assignment.setDeliveryProofUrl(proofUrl);
+
+        // Update order status
+        Order order = assignment.getOrder();
+        order.setStatus(OrderStatus.DELIVERED);
+        orderRepository.save(order);
+
+        // Increment partner's delivery count
+        DeliveryPartner partner = assignment.getPartner();
+        partner.setTotalDeliveries(partner.getTotalDeliveries() + 1);
+        partnerRepository.save(partner);
+
+        // Clean up location data from Redis (delivery complete)
+        redisTemplate.delete(AppConstants.REDIS_DELIVERY_LOCATION + orderId);
+        redisTemplate.delete(AppConstants.REDIS_DELIVERY_DB_WRITE + partnerId);
+
+        log.info("Delivery completed: orderId={} partnerId={}", orderId, partnerId);
+        return toAssignmentResponse(assignmentRepository.save(assignment));
+    }
+
+
     // ── Private Helpers ───────────────────────────────────────────────────────
 
     private DeliveryPartner findPartnerOrThrow(Long partnerId) {
