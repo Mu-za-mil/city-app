@@ -73,6 +73,33 @@ public class DeliveryService {
         return toPartnerResponse(partnerRepository.save(partner));
     }
 
+    @Transactional
+    public DeliveryPartnerResponse goOnline(Long userId) {
+        DeliveryPartner partner = partnerRepository.findByUserId(userId)
+                .orElseThrow(() -> AppException.notFound(
+                        "No delivery partner profile found"));
+
+        if (partner.getStatus() == DeliveryPartner.PartnerStatus.SUSPENDED) {
+            throw AppException.forbidden("Account suspended. Contact support.");
+        }
+        if (partner.getStatus() == DeliveryPartner.PartnerStatus.PENDING) {
+            throw AppException.badRequest("Profile not yet approved by admin.");
+        }
+
+        partner.setStatus(DeliveryPartner.PartnerStatus.ACTIVE);
+        log.info("Partner went online: userId={}", userId);
+        return toPartnerResponse(partnerRepository.save(partner));
+    }
+
+    @Transactional
+    public DeliveryPartnerResponse goOffline(Long userId) {
+        DeliveryPartner partner = partnerRepository.findByUserId(userId)
+                .orElseThrow(() -> AppException.notFound("Partner not found"));
+        partner.setStatus(DeliveryPartner.PartnerStatus.INACTIVE);
+        log.info("Partner went offline: userId={}", userId);
+        return toPartnerResponse(partnerRepository.save(partner));
+    }
+
     // ── Private Helpers ───────────────────────────────────────────────────────
 
     private DeliveryPartner findPartnerOrThrow(Long partnerId) {
