@@ -29,4 +29,21 @@ public class DeliveryController {
                 .body(ApiResponse.ok(
                         deliveryService.registerPartner(user, req)));
     }
+
+    @PostMapping("/online")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    public ResponseEntity<ApiResponse<DeliveryPartnerResponse>> goOnline(
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                deliveryService.goOnline(user.getId())));
+    }
+
+    @PostMapping("/offline")
+    @PreAuthorize("hasRole('DELIVERY_PARTNER')")
+    public ResponseEntity<ApiResponse<DeliveryPartnerResponse>> goOffline(
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                deliveryService.goOffline(user.getId())));
+    }
+
 }
