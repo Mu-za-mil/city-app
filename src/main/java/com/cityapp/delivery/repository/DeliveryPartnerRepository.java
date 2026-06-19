@@ -35,21 +35,35 @@ public interface DeliveryPartnerRepository
      *   Phase 17 ensures PostGIS is always available.
      */
     @Query(value = """
-        SELECT dp.*,
-               ST_Distance(
-                   dp.current_location,
-                   ST_SetSRID(ST_MakePoint(:storeLng, :storeLat), 4326)::geography
-               ) AS distance_meters
+        -- Include partners that have either the PostGIS geography column set
+        -- OR have latitude/longitude populated (fallback when DB write is throttled).
+        SELECT dp.*
         FROM delivery_partners dp
         WHERE dp.status = 'ACTIVE'
-          AND dp.current_location IS NOT NULL
-          AND ST_DWithin(
-                  dp.current_location,
-                  ST_SetSRID(ST_MakePoint(:storeLng, :storeLat), 4326)::geography,
-                  :radiusMeters
+          AND (
+                (dp.current_location IS NOT NULL
+                 AND ST_DWithin(
+                     dp.current_location,
+                     ST_SetSRID(ST_MakePoint(:storeLng, :storeLat), 4326)::geography,
+                     :radiusMeters
+                 ))
+               OR
+                (dp.current_location IS NULL
+                 AND dp.current_latitude IS NOT NULL
+                 AND dp.current_longitude IS NOT NULL
+                 AND ST_DWithin(
+                     ST_SetSRID(ST_MakePoint(dp.current_longitude, dp.current_latitude), 4326)::geography,
+                     ST_SetSRID(ST_MakePoint(:storeLng, :storeLat), 4326)::geography,
+                     :radiusMeters
+                 ))
               )
-        ORDER BY dp.current_location <->
-                 ST_SetSRID(ST_MakePoint(:storeLng, :storeLat), 4326)::geography
+        ORDER BY ST_Distance(
+                  COALESCE(
+                    dp.current_location,
+                    ST_SetSRID(ST_MakePoint(dp.current_longitude, dp.current_latitude), 4326)::geography
+                  ),
+                  ST_SetSRID(ST_MakePoint(:storeLng, :storeLat), 4326)::geography
+              )
         LIMIT :limit
         """, nativeQuery = true)
     List<DeliveryPartner> findAvailableNearStore(
