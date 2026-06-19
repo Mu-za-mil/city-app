@@ -228,9 +228,15 @@ public class DeliveryService {
      *   Zero code overhead. Redis handles the timing.
      */
     @Transactional
-    public void updateLocation(Long partnerId, Long orderId,
+    public void updateLocation(Long userId, Long orderId,
                                UpdateLocationRequest req) {
 
+        // 1. Find the delivery partner by user ID
+        DeliveryPartner partner = partnerRepository.findByUserId(userId)
+                .orElseThrow(() -> AppException.notFound(
+                        "No delivery partner profile found for user: " + userId));
+
+        Long partnerId = partner.getId();
         // Verify assignment ownership
         DeliveryAssignment assignment = assignmentRepository
                 .findByOrderIdAndPartnerId(orderId, partnerId)
@@ -267,8 +273,9 @@ public class DeliveryService {
 
         // ── Layer 2: WebSocket Push (always) ──────────────────────────────────
 
-        Long buyerUserId = assignment.getOrder().getUser().getId();
-        webSocketRelay.sendDeliveryLocation(buyerUserId, locationDto);
+        String buyerPrincipal = assignment.getOrder().getUser().getEmail();
+
+        webSocketRelay.sendDeliveryLocation(buyerPrincipal, locationDto);
 
         // ── Layer 3: PostgreSQL (throttled) ───────────────────────────────────
 
@@ -278,8 +285,7 @@ public class DeliveryService {
                         DB_WRITE_THROTTLE_SEC, TimeUnit.SECONDS);
 
         if (Boolean.TRUE.equals(shouldWrite)) {
-            // This is the first ping in the last 30 seconds — do the DB write
-            DeliveryPartner partner = assignment.getPartner();
+            
             partner.setCurrentCoordinates(req.getLatitude(), req.getLongitude());
             partnerRepository.save(partner);
 
@@ -322,13 +328,21 @@ public class DeliveryService {
     // ── Delivery Completion ───────────────────────────────────────────────────
 
     @Transactional
-    public DeliveryAssignmentResponse markDelivered(Long partnerId,
-                                                    Long orderId,
-                                                    String proofUrl) {
+    public DeliveryAssignmentResponse markDelivered(Long userId, Long orderId, String proofUrl) {
+        // 1. Find the delivery partner by user ID
+        DeliveryPartner partner = partnerRepository.findByUserId(userId)
+                .orElseThrow(() -> AppException.notFound("No delivery partner profile found for user: " + userId));
+
+        Long partnerId = partner.getId();
+
+        // 2. Verify assignment ownership using the actual partner ID
         DeliveryAssignment assignment = assignmentRepository
                 .findByOrderIdAndPartnerId(orderId, partnerId)
-                .orElseThrow(() -> AppException.notFound(
-                        "Assignment not found for orderId=" + orderId));
+                .orElseThrow(() -> AppException.notFound("Assignment not found for orderId=" + orderId));
+
+        if (assignment.getStatus() == DeliveryAssignment.AssignmentStatus.DELIVERED) {
+            throw AppException.badRequest("Delivery already completed");
+        }
 
         assignment.setStatus(DeliveryAssignment.AssignmentStatus.DELIVERED);
         assignment.setDeliveredAt(Instant.now());
@@ -340,16 +354,15 @@ public class DeliveryService {
         orderRepository.save(order);
 
         // Increment partner's delivery count
-        DeliveryPartner partner = assignment.getPartner();
         partner.setTotalDeliveries(partner.getTotalDeliveries() + 1);
         partnerRepository.save(partner);
 
-        // Clean up location data from Redis (delivery complete)
+        // Clean up location data from Redis
         redisTemplate.delete(AppConstants.REDIS_DELIVERY_LOCATION + orderId);
         redisTemplate.delete(AppConstants.REDIS_DELIVERY_DB_WRITE + partnerId);
 
         log.info("Delivery completed: orderId={} partnerId={}", orderId, partnerId);
-        return toAssignmentResponse(assignmentRepository.save(assignment));
+        return toAssignmentResponse(assignment);
     }
 
 

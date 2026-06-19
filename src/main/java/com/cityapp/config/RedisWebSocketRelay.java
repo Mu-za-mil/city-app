@@ -63,17 +63,19 @@ public class RedisWebSocketRelay {
      * Send a delivery location update to a specific buyer.
      * Delivers to local WebSocket AND publishes to Redis for other instances.
      */
-    public void sendDeliveryLocation(Long buyerUserId, Object locationPayload) {
+    public void sendDeliveryLocation(String buyerPrincipal, Object locationPayload) {
+        
+        log.debug(">>> Sending location to buyerPrincipal={}", buyerPrincipal);
         // 1. Send to buyer's WebSocket on THIS instance
         try {
             messagingTemplate.convertAndSendToUser(
-                    buyerUserId.toString(),
+                    buyerPrincipal,
                     "/queue/delivery",
                     locationPayload
             );
         } catch (Exception e) {
-            log.debug("Local WebSocket delivery failed for userId={}: {}",
-                    buyerUserId, e.getMessage());
+            log.debug("Local WebSocket delivery failed for principal={}: {}",
+                    buyerPrincipal, e.getMessage());
         }
 
         // 2. Publish to Redis → other instances will deliver to their local connections
@@ -81,10 +83,10 @@ public class RedisWebSocketRelay {
             try {
                 String payload = objectMapper.writeValueAsString(locationPayload);
                 redisTemplate.convertAndSend(
-                        DELIVERY_CHANNEL_PREFIX + buyerUserId, payload);
+                        DELIVERY_CHANNEL_PREFIX + buyerPrincipal, payload);
             } catch (Exception e) {
-                log.warn("Redis relay publish failed for userId={}: {}",
-                        buyerUserId, e.getMessage());
+                log.warn("Redis relay publish failed for principal={}: {}",
+                        buyerPrincipal, e.getMessage());
             }
         }
     }
@@ -106,14 +108,14 @@ public class RedisWebSocketRelay {
                     (message, pattern) -> {
                         try {
                             String channel = new String(message.getChannel());
-                            String userId  = channel.replace(DELIVERY_CHANNEL_PREFIX, "");
+                            String buyerPrincipal = channel.replace(DELIVERY_CHANNEL_PREFIX, "");
                             String body    = new String(message.getBody());
 
                             // Push to buyer's local WebSocket if they're connected here
                             messagingTemplate.convertAndSendToUser(
-                                    userId, "/queue/delivery", body);
+                                    buyerPrincipal, "/queue/delivery", body);
 
-                            log.debug("Redis relay delivered location to userId={}", userId);
+                            log.debug("Redis relay delivered location to buyerPrincipal={}", buyerPrincipal);
                         } catch (Exception e) {
                             log.warn("Redis relay listener error: {}", e.getMessage());
                         }
