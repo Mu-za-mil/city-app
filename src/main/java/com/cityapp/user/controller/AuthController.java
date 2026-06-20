@@ -5,6 +5,7 @@ import com.cityapp.auth.service.RefreshTokenService;
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.user.dto.*;
 import com.cityapp.user.entity.User;
+import com.cityapp.user.service.OtpService;
 import com.cityapp.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -26,6 +27,7 @@ public class AuthController {
 
     private final UserService         userService;
     private final RefreshTokenService refreshTokenService;
+    private final OtpService otpService;
 
     // ── Registration ──────────────────────────────────────────────────────────
 
@@ -139,5 +141,25 @@ public class AuthController {
                 .toList();
 
         return ResponseEntity.ok(ApiResponse.ok(sessions));
+    }
+
+    @PostMapping("/otp/send")
+    public ResponseEntity<ApiResponse<OtpResponse>> sendOtp(@Valid @RequestBody OtpRequest request) {
+        String otp = otpService.generateAndSendOtp(request.getPhone());
+        OtpResponse response = OtpResponse.builder()
+                .sent(true)
+                .message("OTP sent successfully")
+                .otp(otp)  // Include OTP in dev for easy testing – remove in production
+                .build();
+        return ResponseEntity.ok(ApiResponse.ok(response, "OTP sent"));
+    }
+
+    @PostMapping("/otp/verify")
+    public ResponseEntity<ApiResponse<AuthResponse>> verifyOtp(
+            @Valid @RequestBody VerifyOtpRequest req,
+            HttpServletRequest httpRequest) {
+
+        AuthResponse authResponse = otpService.verifyOtp(req, httpRequest);
+        return ResponseEntity.ok(ApiResponse.ok(authResponse, "Login successful"));
     }
 }

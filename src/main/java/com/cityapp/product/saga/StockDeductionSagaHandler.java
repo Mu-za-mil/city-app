@@ -1,6 +1,8 @@
 package com.cityapp.product.saga;
 
 import com.cityapp.common.constants.AppConstants;
+import com.cityapp.common.event.EventPublisher;
+import com.cityapp.common.event.InventoryLowEvent;
 import com.cityapp.common.event.PlaceOrderCommand;
 import com.cityapp.common.event.StockDeductedEvent;
 import com.cityapp.product.entity.Inventory;
@@ -75,6 +77,7 @@ public class StockDeductionSagaHandler {
 
     private final InventoryRepository           inventoryRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final EventPublisher                 eventPublisher;
     private final StringRedisTemplate           redisTemplate;
 
     private static final long SAGA_DEDUP_HOURS = 24L;
@@ -186,6 +189,20 @@ public class StockDeductionSagaHandler {
             int newQty = inv.getQuantity() - itemSpec.getQuantity();
             inv.setQuantity(newQty);
             inventoryRepository.save(inv);
+
+            if (newQty <= inv.getLowStockThreshold()) {
+                eventPublisher.publishInventoryLow(
+                        InventoryLowEvent.builder()
+                                .eventId(EventPublisher.generateEventId())
+                                .productId(inv.getProduct().getId())
+                                .productName(inv.getProduct().getName())
+                                .storeId(inv.getProduct().getStore().getId())
+                                .sellerId(inv.getProduct().getStore().getOwner().getId())
+                                .currentQuantity(newQty)
+                                .threshold(inv.getLowStockThreshold())
+                                .timestamp(Instant.now())
+                                .build());
+            }
 
             log.debug("Deducted: productId={} qty={} remaining={}",
                     itemSpec.getProductId(), itemSpec.getQuantity(), newQty);
