@@ -62,13 +62,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                // SockJS fallback: if WebSocket not available (old browsers, proxies):
-                // uses long-polling as a transparent fallback.
-                // Client code is identical. Infrastructure handles the difference.
-                .withSockJS()
-                .setAllowedOriginPatterns("*");
+                .setAllowedOriginPatterns("*")
         // In production: restrict to your frontend domain:
         // .setAllowedOriginPatterns("https://app.cityapp.com")
+                .withSockJS();
+        // SockJS fallback: if WebSocket not available (old browsers, proxies):
+        // uses long-polling as a transparent fallback.
+        // Client code is identical. Infrastructure handles the difference.
     }
 
     @Override
