@@ -326,15 +326,31 @@ management:
     endpoints:
       web:
         exposure:
-          include: health,info,prometheus,metrics,env
+          include: health,info,prometheus,metrics,env,circuitbreakers
     endpoint:
       health:
+        show-details: always
         probes:
           enabled: true
           # WHY probes: Kubernetes calls /actuator/health/liveness and /readiness
           # separately. Liveness = JVM is alive (don't kill it).
           # Readiness = can serve traffic (is DB connected? Is Redis up?).
           # Combining them means a DB blip kills the pod unnecessarily.
+
+        circuitbreakers:
+          enabled: true
+          # Include circuit breaker status in health checks.
+          # Kubernetes readiness probe reads /actuator/health.
+          # OPEN circuit → unhealthy → pod removed from load balancer rotation.
+          # Traffic goes to other instances until circuit closes.
+
+        # Resilience4j metrics in Prometheus format
+        
+        metrics:
+          distribution:
+            percentiles-histogram:
+              resilience4j.circuitbreaker.calls: true
+
     tracing:
       sampling:
         probability: ${TRACE_SAMPLE_RATE:1.0}
