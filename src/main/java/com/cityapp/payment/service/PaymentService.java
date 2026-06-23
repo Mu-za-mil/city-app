@@ -3,6 +3,7 @@ package com.cityapp.payment.service;
 import java.math.BigDecimal;
 import java.time.Instant;
 
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,7 @@ public class PaymentService {
     @Value("${cityapp.razorpay.key-secret}")
     private String razorpayKeySecret;
 
+    @TimeLimiter(name = "razorpay")
     @CircuitBreaker(name = "razorpay", fallbackMethod = "initiatePaymentFallback")
     @Retry(name = "razorpay")
     @Transactional
