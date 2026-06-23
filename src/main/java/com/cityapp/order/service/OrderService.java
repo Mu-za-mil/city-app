@@ -6,14 +6,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import com.cityapp.common.constants.AppConstants;
-import com.cityapp.common.event.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cityapp.common.constants.AppConstants;
+import com.cityapp.common.event.EventPublisher;
+import com.cityapp.common.event.OrderStatusChangedEvent;
+import com.cityapp.common.event.PlaceOrderCommand;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.order.dto.OrderItemRequest;
@@ -421,13 +423,14 @@ public class OrderService {
     private OrderResponse buildOrderResponse(Order order) {
         OrderResponse response = orderMapper.toResponse(order);
 
-        // Enrich with payment info if exists
-        paymentRepository.findByOrderId(order.getId()).ifPresent(payment -> {
-            // Note: @Mapping target="paymentMethod" ignore=true in mapper
-            // We set it manually here because Payment is a separate entity
-            // with its own repository — not a relationship on Order.
-            // Avoid: adding @OneToMany Payment on Order entity (over-coupling).
-        });
+                // Enrich with payment info if exists
+                paymentRepository.findByOrderId(order.getId()).ifPresent(payment -> {
+                        // Map payment fields into the response
+                        response.setPaymentMethod(payment.getMethod());
+                        response.setPaymentStatus(payment.getStatus() != null
+                                        ? payment.getStatus().name()
+                                        : null);
+                });
 
         return response;
     }

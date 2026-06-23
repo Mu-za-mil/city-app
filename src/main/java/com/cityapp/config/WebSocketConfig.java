@@ -1,8 +1,5 @@
 package com.cityapp.config;
 
-import com.cityapp.security.service.JwtService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -14,7 +11,14 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.socket.config.annotation.*;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+import com.cityapp.security.service.JwtService;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * WebSocket STOMP configuration.
@@ -69,6 +73,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // SockJS fallback: if WebSocket not available (old browsers, proxies):
         // uses long-polling as a transparent fallback.
         // Client code is identical. Infrastructure handles the difference.
+
+        registry.addEndpoint("/ws-native")
+                .setAllowedOriginPatterns("*");
+
     }
 
     @Override
