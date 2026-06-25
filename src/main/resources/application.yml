@@ -53,7 +53,7 @@ spring:
     # the checksum changes and Flyway refuses to start. Prevents silent
     # schema drift between environments.
 
-  # ── REDIS ───────────────────────────────────────────────────────────────
+  # ── REDIS ────────────────────────────────────────────────────────────────
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -128,8 +128,8 @@ spring:
   cache:
     type: redis
 
-  # ── Resilience4j ──────────────────────────────────────────────────────────────
-  resilience4j:
+# ── Resilience4j ──────────────────────────────────────────────────────────────
+resilience4j:
 
     # ── Circuit Breakers ─────────────────────────────────────────────────────────
     circuitbreaker:
@@ -365,5 +365,7 @@ logging:
       org.hibernate.SQL: OFF
       org.springframework.security: WARN
       org.springframework.cache: WARN
+      io.github.resilience4j: DEBUG
+      org.springframework.boot.context.properties: DEBUG
 
 

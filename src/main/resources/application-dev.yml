@@ -23,7 +23,7 @@ cityapp:
     # WHY false: single instance in dev. Redis relay only needed for HA.
 
   ratelimit:
-    enabled: false
+    enabled: true
     # WHY disabled in dev:
     # During development: you test the login endpoint dozens of times.
     # With rate limiting on: you'd hit your limit in 5 attempts.
