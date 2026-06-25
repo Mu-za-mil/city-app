@@ -1,24 +1,31 @@
 package com.cityapp.ratelimit;
 
-import com.cityapp.common.response.ApiResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.bucket4j.Bucket;
-import io.github.bucket4j.BucketConfiguration;
-import io.github.bucket4j.ConsumptionProbe;
-import io.github.bucket4j.distributed.proxy.ProxyManager;
-import jakarta.servlet.*;
-import jakarta.servlet.http.*;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.function.Supplier;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.function.Supplier;
+import com.cityapp.common.response.ApiResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.bucket4j.Bucket;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.ConsumptionProbe;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * HTTP Filter for API rate limiting.
@@ -67,7 +74,6 @@ import java.util.function.Supplier;
 @Slf4j
 @Component
 @Order(1)
-@RequiredArgsConstructor
 public class RateLimitFilter implements Filter {
 
     private final ProxyManager<byte[]>              proxyManager;
@@ -77,7 +83,22 @@ public class RateLimitFilter implements Filter {
     private final Supplier<BucketConfiguration>    otpBucketConfig;
     private final Supplier<BucketConfiguration>    generalApiBucketConfig;
 
-    @Value("${app.ratelimit.enabled:true}")
+    public RateLimitFilter(
+            @Autowired(required = false) ProxyManager<byte[]> proxyManager,
+            ObjectMapper objectMapper,
+            Supplier<BucketConfiguration> loginBucketConfig,
+            Supplier<BucketConfiguration> registerBucketConfig,
+            Supplier<BucketConfiguration> otpBucketConfig,
+            Supplier<BucketConfiguration> generalApiBucketConfig) {
+        this.proxyManager = proxyManager;
+        this.objectMapper = objectMapper;
+        this.loginBucketConfig = loginBucketConfig;
+        this.registerBucketConfig = registerBucketConfig;
+        this.otpBucketConfig = otpBucketConfig;
+        this.generalApiBucketConfig = generalApiBucketConfig;
+    }
+
+    @Value("${cityapp.ratelimit.enabled:true}")
     private boolean rateLimitEnabled;
 
     @Override
@@ -103,40 +124,38 @@ public class RateLimitFilter implements Filter {
         Supplier<BucketConfiguration> bucketConfig = null;
 
         if ("POST".equals(method) && path.endsWith("/auth/login")) {
-            // Composite key: IP + email (most targeted protection)
-            String email = extractEmailFromBody(request);
-            if (email != null) {
-                bucketKey = "rl:login:" + ip + ":" + email.toLowerCase();
-            } else {
-                bucketKey = "rl:login:" + ip;
-            }
+
+            // Rate limit by IP
+            bucketKey = "rl:login:" + ip;
             bucketConfig = loginBucketConfig;
 
         } else if ("POST".equals(method) && path.endsWith("/auth/register")) {
-            bucketKey   = "rl:register:" + ip;
+
+            bucketKey = "rl:register:" + ip;
             bucketConfig = registerBucketConfig;
 
         } else if (path.contains("/auth/otp")) {
-            // OTP: key by phone (in request body or query param)
+
             String phone = request.getParameter("phone");
-            bucketKey   = "rl:otp:" + (phone != null ? phone : ip);
+
+            bucketKey = "rl:otp:" + (phone != null ? phone : ip);
             bucketConfig = otpBucketConfig;
 
         } else if (path.startsWith("/api/")) {
-            // General API rate limit for authenticated users
+
             String userId = extractUserIdFromToken(request);
+
             bucketKey = userId != null
                     ? "rl:api:user:" + userId
                     : "rl:api:ip:" + ip;
+
             bucketConfig = generalApiBucketConfig;
         }
 
-        if (bucketKey == null) {
-            // No rate limit for this path
+        if (bucketKey == null || bucketConfig == null) {
             chain.doFilter(req, res);
             return;
         }
-
         // ── Check and consume a token ─────────────────────────────────────────
 
         Bucket bucket = proxyManager.builder()
@@ -152,8 +171,12 @@ public class RateLimitFilter implements Filter {
 
         } else {
             // Rate limit exceeded. Reject with 429.
-            long waitForRefill = probe.getNanosToWaitForRefill() / 1_000_000_000;
-
+            long waitForRefill = Math.max(
+                    1,
+                    (long) Math.ceil(
+                            probe.getNanosToWaitForRefill() / 1_000_000_000.0
+                    )
+            );
             log.warn("Rate limit exceeded: path={} key={} waitSeconds={}",
                     path, bucketKey, waitForRefill);
 
@@ -235,27 +258,6 @@ public class RateLimitFilter implements Filter {
                 || ip.equals("0:0:0:0:0:0:0:1");
     }
 
-    // ── Body Parsing for Composite Keys ───────────────────────────────────────
-
-    /**
-     * Extract email from login request body for composite rate limit key.
-     * Uses a cached body wrapper to allow reading the body multiple times.
-     */
-    private String extractEmailFromBody(HttpServletRequest request) {
-        try {
-            String body = request.getReader().lines()
-                    .reduce("", String::concat);
-            // Simple JSON parsing without ObjectMapper overhead
-            int emailStart = body.indexOf("\"email\"");
-            if (emailStart == -1) return null;
-            int valueStart = body.indexOf("\"", emailStart + 8) + 1;
-            int valueEnd   = body.indexOf("\"", valueStart);
-            if (valueStart <= 0 || valueEnd <= 0) return null;
-            return body.substring(valueStart, valueEnd);
-        } catch (Exception e) {
-            return null;  // Can't read body: use IP only
-        }
-    }
 
     /**
      * Extract userId from JWT for authenticated rate limiting.
