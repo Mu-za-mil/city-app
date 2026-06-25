@@ -4,9 +4,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -83,4 +86,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     java.math.BigDecimal sumRevenueDeliveredSince(
             @Param("storeId") Long storeId,
             @Param("since") Instant since);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+    select o
+    from Order o
+    where o.id = :id
+""")
+    Optional<Order> findByIdForUpdate(Long id);
 }

@@ -2,6 +2,7 @@ package com.cityapp.payment.service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.json.JSONObject;
@@ -51,25 +52,85 @@ public class PaymentService {
     @Value("${cityapp.razorpay.key-secret}")
     private String razorpayKeySecret;
 
-    @TimeLimiter(name = "razorpay")
-    @CircuitBreaker(name = "razorpay", fallbackMethod = "initiatePaymentFallback")
+    @CircuitBreaker(
+            name = "razorpay",
+            fallbackMethod = "initiatePaymentFallback"
+    )
     @Retry(name = "razorpay")
     @Transactional
     public PaymentResponse initiatePayment(InitiatePaymentRequest req) {
 
-        Order order = orderRepository.findById(req.getOrderId())
-                .orElseThrow(() -> AppException.notFound(
-                        "Order not found: " + req.getOrderId()));
+        Order order = orderRepository.findByIdForUpdate(req.getOrderId())
+                .orElseThrow(() ->
+                        AppException.notFound(
+                                "Order not found: " + req.getOrderId()));
 
         if (order.getStatus() != OrderStatus.CONFIRMED) {
             throw AppException.badRequest(
-                    "Cannot initiate payment for order in status: " + order.getStatus());
+                    "Cannot initiate payment for order in status: "
+                            + order.getStatus());
         }
 
-        paymentRepository.findByOrderId(order.getId()).ifPresent(existing -> {
+        // Prevent duplicate successful payments
+        if (paymentRepository.existsByOrderIdAndStatus(
+                order.getId(),
+                Payment.PaymentStatus.SUCCESS)) {
+
             throw AppException.conflict(
-                    "Payment already exists for this order: " + existing.getStatus());
-        });
+                    "Order has already been paid");
+        }
+
+        boolean alreadyPaid =
+                paymentRepository.existsByOrderIdAndStatus(
+                        order.getId(),
+                        Payment.PaymentStatus.SUCCESS);
+
+        if (alreadyPaid) {
+            throw AppException.conflict("Order already paid");
+        }
+
+        // Check latest payment attempt
+        Optional<Payment> latestPayment =
+                paymentRepository.findTopByOrderIdOrderByCreatedAtDesc(
+                        order.getId());
+
+        if (latestPayment.isPresent()) {
+
+            Payment existing = latestPayment.get();
+
+            switch (existing.getStatus()) {
+
+                case SUCCESS -> {
+                    throw AppException.conflict(
+                            "Order has already been paid");
+                }
+
+                case PENDING -> {
+
+                    log.info(
+                            "Returning existing pending payment. orderId={} paymentId={}",
+                            order.getId(),
+                            existing.getId()
+                    );
+
+                    // Idempotent response
+                    return buildResponse(existing);
+                }
+
+                case FAILED, REFUNDED -> {
+
+                    log.info(
+                            "Creating new payment attempt. orderId={} previousPaymentId={} status={}",
+                            order.getId(),
+                            existing.getId(),
+                            existing.getStatus()
+                    );
+
+                }
+            }
+        }
+
+        // New payment attempt
 
         if ("COD".equalsIgnoreCase(req.getMethod())) {
             return createCodPayment(order);
@@ -149,22 +210,19 @@ public class PaymentService {
         }
     }
 
-    /**
-     * Circuit breaker fallback — called when:
-     *   1. Razorpay throws after retries are exhausted
-     *   2. The circuit is OPEN (Razorpay has been failing repeatedly)
-     *   3. TimeLimiter exceeded (call took too long)
-     */
     public PaymentResponse initiatePaymentFallback(
-            InitiatePaymentRequest req, Throwable throwable) {
+            InitiatePaymentRequest req,
+            Throwable throwable) {
 
-        log.error("Razorpay unavailable for orderId={}. Falling back to COD. Reason: {}",
-                req.getOrderId(), throwable.getMessage());
+        log.error(
+                "Razorpay unavailable for orderId={}",
+                req.getOrderId(),
+                throwable
+        );
 
-        Order order = orderRepository.findById(req.getOrderId())
-                .orElseThrow(() -> AppException.notFound("Order not found"));
-
-        return createCodPayment(order);
+        throw AppException.serviceUnavailable(
+                "Payment provider temporarily unavailable. Please try again later."
+        );
     }
 
     /**
@@ -185,5 +243,29 @@ public class PaymentService {
 
         log.info("Payment confirmed: orderId={} razorpayPaymentId={}",
                 payment.getOrder().getId(), razorpayPaymentId);
+    }
+
+    private PaymentResponse buildResponse(Payment payment) {
+
+        boolean isRazorpay =
+                "RAZORPAY".equalsIgnoreCase(payment.getMethod());
+
+        return PaymentResponse.builder()
+                .paymentId(payment.getId())
+                .orderId(payment.getOrder().getId())
+                .method(payment.getMethod())
+                .status(payment.getStatus().name())
+                .amount(payment.getAmount())
+                .razorpayOrderId(
+                        isRazorpay
+                                ? payment.getGatewayOrderId()
+                                : null
+                )
+                .razorpayKeyId(
+                        isRazorpay
+                                ? razorpayKeyId
+                                : null
+                )
+                .build();
     }
 }
