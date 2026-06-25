@@ -110,8 +110,9 @@ public class SecurityConfig {
                                 .requestMatchers(
                                         "/actuator/health/**",
                                         "/actuator/info",
-                                        "/actuator/prometheus",  // Add this line
-                                        "/actuator/metrics/**").permitAll()
+                                        "/actuator/prometheus",
+                                        "/actuator/metrics/**",
+                                        "/actuator/circuitbreakers").permitAll()
 
                                 // Swagger/OpenAPI (dev only — restrict in production)
                                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
