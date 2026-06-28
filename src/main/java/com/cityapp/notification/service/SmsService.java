@@ -1,5 +1,6 @@
 package com.cityapp.notification.service;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -37,16 +38,16 @@ import java.util.Map;
 @Service
 public class SmsService {
 
-    @Value("${app.otp.sms-enabled:false}")
+    @Value("${cityapp.otp.sms-enabled:false}")
     private boolean smsEnabled;
 
-    @Value("${app.msg91.auth-key:}")
+    @Value("${cityapp.msg91.auth-key:}")
     private String msg91AuthKey;
 
-    @Value("${app.msg91.template-id:}")
+    @Value("${cityapp.msg91.template-id:}")
     private String msg91TemplateId;
 
-    @Value("${app.msg91.sender-id:CITYAP}")
+    @Value("${cityapp.msg91.sender-id:CITYAP}")
     private String senderId;
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -55,6 +56,7 @@ public class SmsService {
      * Send an OTP to a phone number.
      * In dev: logs the OTP. In prod: sends real SMS.
      */
+    @CircuitBreaker(name = "msg91", fallbackMethod = "sendOtpFallback")
     public void sendOtp(String phone, String otp) {
         if (!smsEnabled) {
             // Development: print OTP to console
@@ -99,6 +101,14 @@ public class SmsService {
             // Don't rethrow: fall back to email OTP.
         }
     }
+
+    public void sendOtpFallback(String phone, String otp, Throwable t) {
+        log.error("MSG91 circuit open. SMS OTP not sent to {}. " +
+                "Email OTP will be sent instead. Reason: {}", phone, t.getMessage());
+        // The email OTP path is separate — it still works.
+        // User receives OTP via email even when SMS fails.
+    }
+
 
     /**
      * Send a delivery confirmation SMS.

@@ -53,7 +53,7 @@ spring:
     # the checksum changes and Flyway refuses to start. Prevents silent
     # schema drift between environments.
 
-  # ── REDIS ───────────────────────────────────────────────────────────────
+  # ── REDIS ────────────────────────────────────────────────────────────────
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -128,6 +128,136 @@ spring:
   cache:
     type: redis
 
+# ── Resilience4j ──────────────────────────────────────────────────────────────
+resilience4j:
+
+    # ── Circuit Breakers ─────────────────────────────────────────────────────────
+    circuitbreaker:
+      configs:
+        # Default config (inherited by all circuit breakers unless overridden)
+        default:
+          slidingWindowType: COUNT_BASED
+          # COUNT_BASED: circuit evaluates based on last N calls.
+          # TIME_BASED: evaluates based on calls in last N seconds.
+          # COUNT_BASED is simpler and more predictable for our use case.
+
+          slidingWindowSize: 10
+          # Evaluate the last 10 calls.
+          # If 50% fail → circuit opens.
+
+          failureRateThreshold: 50
+          # 50%: if 5 of last 10 calls fail → OPEN.
+          # WHY 50% not 100%: at 100%, you need 10 consecutive failures.
+          # Real outages: alternating success/fail is more common.
+          # 50%: circuit opens when the service is clearly struggling.
+
+          slowCallRateThreshold: 80
+          # If 80% of calls take longer than slowCallDurationThreshold → OPEN.
+          # Slow calls are as damaging as failed calls (thread blocking).
+
+          slowCallDurationThreshold: 3s
+          # A call taking > 3 seconds is considered "slow."
+
+          waitDurationInOpenState: 30s
+          # Circuit stays OPEN for 30 seconds before testing recovery.
+          # During OPEN state: all calls get the fallback immediately.
+          # After 30s: transitions to HALF_OPEN (test mode).
+
+          permittedNumberOfCallsInHalfOpenState: 3
+          # HALF_OPEN: allow 3 test calls through to check if service recovered.
+          # All 3 succeed: CLOSE (normal operation resumed).
+          # Any fail: OPEN again (back to waiting 30 more seconds).
+
+          registerHealthIndicator: true
+          # Exposes circuit state at /actuator/health.
+          # Kubernetes readiness probe: can remove pod from rotation if circuit open.
+
+      instances:
+        razorpay:
+          baseConfig: default
+          # Razorpay: payment gateway. External third-party.
+          # Less tolerant of slowness (payment UX is critical).
+          slowCallDurationThreshold: 3s
+          waitDurationInOpenState: 30s
+          failureRateThreshold: 40
+          # Slightly more aggressive: open at 40% failure rate.
+          # Payments are critical UX. Fail fast.
+
+        fcm:
+          baseConfig: default
+          # FCM: push notifications. Can tolerate more failures (non-critical).
+          failureRateThreshold: 80
+          # 80%: push notifications are supplementary. Tolerate more failures.
+          waitDurationInOpenState: 60s
+          # Wait longer before retrying (FCM outages often last minutes).
+
+        msg91:
+          baseConfig: default
+          # MSG91: SMS gateway. Similar to FCM.
+          failureRateThreshold: 60
+          waitDurationInOpenState: 60s
+
+    # ── Retry ─────────────────────────────────────────────────────────────────────
+    retry:
+      configs:
+        default:
+          maxAttempts: 3
+          # Total attempts: 3 (1 original + 2 retries).
+
+          waitDuration: 500ms
+          # Wait 500ms between retries.
+          # With exponential backoff: 500ms, 1000ms, 2000ms.
+
+          enableExponentialBackoff: true
+          exponentialBackoffMultiplier: 2
+          # Multiplier 2: each retry doubles the wait.
+          # Why exponential: a struggling service needs time to recover.
+          # Constant retries at 500ms add load to an already struggling service.
+          # Exponential: reduces pressure over time.
+
+          retryExceptions:
+            - java.io.IOException
+            - java.util.concurrent.TimeoutException
+            - org.springframework.web.client.ResourceAccessException
+          # Only retry on transient exceptions (network issues, timeouts).
+
+          ignoreExceptions:
+            - com.cityapp.common.exception.AppException
+            # Never retry business exceptions.
+            # AppException.badRequest("Email taken"): retrying won't help.
+            # The DB will still have that email on the second attempt.
+
+      instances:
+        razorpay:
+          baseConfig: default
+          maxAttempts: 2
+          # Only 2 attempts for payment (1 retry).
+          # Why fewer: payment APIs must be idempotent on retry.
+          # Razorpay: idempotency via order ID. Safe to retry.
+          # But we're conservative: 2 attempts max.
+
+    # ── Time Limiter ──────────────────────────────────────────────────────────────
+    timelimiter:
+      configs:
+        default:
+          timeoutDuration: 5s
+          # Any call exceeding 5 seconds: TimeoutException thrown.
+          # Combined with CircuitBreaker: counts as a slow call.
+          cancelRunningFuture: true
+          # Cancel the running Future when timeout occurs.
+          # Without this: the thread continues running even after timeout.
+          # Resources (threads, connections) not released.
+
+      instances:
+        razorpay:
+          timeoutDuration: 3s
+          # Tighter timeout for payments: 3 seconds max.
+          # User is on the checkout page. 3 seconds feels long.
+          # After 3 seconds: show "payment gateway unavailable" and fallback.
+
+        fcm:
+          timeoutDuration: 5s
+
   # ── APP CONFIG ───────────────────────────────────────────────────────────────
 cityapp:
   jwt:
@@ -155,20 +285,72 @@ cityapp:
 
   fcm:
     credentials-path: classpath:firebase-credentials.json
+
+  ratelimit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    # Disable in dev: easier testing without hitting limits.
+    # application-dev.yml: enabled: false
+
+    # Bucket definitions (token bucket algorithm)
+    # Tokens: how many requests allowed in the window.
+    # Refill: how fast tokens are replenished.
+
+    # Login endpoint (most important to protect)
+    login:
+      capacity: 5          # max 5 attempts
+      refill-tokens: 5     # replenish 5 tokens
+      refill-seconds: 900  # every 15 minutes
+      # Effect: 5 attempts per 15 minutes per IP+email.
+      # Attacker: blocked after 5 wrong attempts.
+
+    # Registration
+    register:
+      capacity: 3
+      refill-tokens: 3
+      refill-seconds: 3600  # 3 registrations per hour per IP
+
+    # OTP sending (prevent SMS bombing)
+    otp:
+      capacity: 3
+      refill-tokens: 3
+      refill-seconds: 3600  # 3 OTPs per hour per phone number
+
+    # General API (prevent scraping and abuse)
+    api:
+      capacity: 100
+      refill-tokens: 100
+      refill-seconds: 60  # 100 requests per minute per user
+
 # ── ACTUATOR ─────────────────────────────────────────────────────────────────
 management:
     endpoints:
       web:
         exposure:
-          include: health,info,prometheus,metrics,env
+          include: health,info,prometheus,metrics,env,circuitbreakers
     endpoint:
       health:
+        show-details: always
         probes:
           enabled: true
           # WHY probes: Kubernetes calls /actuator/health/liveness and /readiness
           # separately. Liveness = JVM is alive (don't kill it).
           # Readiness = can serve traffic (is DB connected? Is Redis up?).
           # Combining them means a DB blip kills the pod unnecessarily.
+
+        circuitbreakers:
+          enabled: true
+          # Include circuit breaker status in health checks.
+          # Kubernetes readiness probe reads /actuator/health.
+          # OPEN circuit → unhealthy → pod removed from load balancer rotation.
+          # Traffic goes to other instances until circuit closes.
+
+        # Resilience4j metrics in Prometheus format
+        
+        metrics:
+          distribution:
+            percentiles-histogram:
+              resilience4j.circuitbreaker.calls: true
+
     tracing:
       sampling:
         probability: ${TRACE_SAMPLE_RATE:1.0}
@@ -183,5 +365,7 @@ logging:
       org.hibernate.SQL: OFF
       org.springframework.security: WARN
       org.springframework.cache: WARN
+      io.github.resilience4j: DEBUG
+      org.springframework.boot.context.properties: DEBUG
 
 

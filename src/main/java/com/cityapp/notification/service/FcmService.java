@@ -3,6 +3,7 @@ package com.cityapp.notification.service;
 import com.cityapp.notification.entity.DeviceToken;
 import com.cityapp.notification.repository.DeviceTokenRepository;
 import com.google.firebase.messaging.*;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,6 +71,7 @@ public class FcmService {
      * @param body          notification body text
      * @param data          optional key-value pairs (app can read these in background)
      */
+    @CircuitBreaker(name = "fcm", fallbackMethod = "sendToUserFallback")
     public void sendToUser(Long userId, String title, String body,
                            Map<String, String> data) {
         if (firebaseMessaging == null) {
@@ -119,6 +121,20 @@ public class FcmService {
         }
     }
 
+    /**
+     * Fallback when FCM circuit is OPEN or FCM call fails.
+     * Gracefully degrades – push notification is skipped, but the business
+     * operation (order placement, etc.) continues unaffected.
+     */
+    public void sendToUserFallback(Long userId, String title, String body,
+                                   Map<String, String> data, Throwable t) {
+        log.warn("FCM circuit open or failed for userId={}. Push skipped. " +
+                        "In-app notification/email still sent. Reason: {}",
+                userId, t != null ? t.getClass().getSimpleName() : "unknown");
+        // No exception thrown – the business operation continues.
+        // The caller (NotificationService) will still create in-app notification.
+    }
+    
     /**
      * Handle per-token responses from FCM.
      * Deactivate tokens that FCM says are UNREGISTERED.
