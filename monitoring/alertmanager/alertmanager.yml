@@ -1,0 +1,34 @@
+global:
+  # Default email settings
+  smtp_smarthost: 'localhost:1025'   # MailHog in dev
+  smtp_from: 'alertmanager@cityapp.com'
+  smtp_require_tls: false
+
+route:
+  # Default receiver for all alerts
+  receiver: 'email-team'
+
+  # Route severity-based alerts to different receivers
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: 'email-team'
+      repeat_interval: 1h    # Re-alert every 1 hour if unresolved
+
+    - matchers:
+        - severity = "warning"
+      receiver: 'email-team'
+      repeat_interval: 4h    # Re-alert every 4 hours for warnings
+
+receivers:
+  - name: 'email-team'
+    email_configs:
+      - to: 'oncall@cityapp.com'
+        subject: '[CityApp Alert] {{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Labels: {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+          Starts at: {{ .StartsAt }}
+          {{ end }}
