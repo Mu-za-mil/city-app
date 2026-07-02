@@ -168,11 +168,52 @@ services:
     networks:
       - cityapp-network
 
+  # ── Loki (Log Aggregation Backend) ───────────────────────────────────────
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: cityapp-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - cityapp-network
+
+  # ── Promtail (Log Shipper) ────────────────────────────────────────────────
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: cityapp-promtail
+    volumes:
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
+      - ./logs:/var/log/app     # Mount application log directory
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - cityapp-network
+
+  # ── Alertmanager ──────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: cityapp-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command: >
+      --config.file=/etc/alertmanager/alertmanager.yml
+      --storage.path=/alertmanager
+    networks:
+      - cityapp-network
+
 volumes:
   postgres_data:
   redis_data:
   prometheus_data:
   grafana_data:
+  loki_data:
 
 networks:
   cityapp-network:
