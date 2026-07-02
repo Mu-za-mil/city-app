@@ -1,0 +1,171 @@
+groups:
+
+  # ── API Health ─────────────────────────────────────────────────────────────
+  - name: api_health
+    rules:
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(http_server_requests_seconds_count{status=~"5.."}[5m])
+            /
+            rate(http_server_requests_seconds_count[5m])
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate: {{ $value | humanizePercentage }}"
+          description: >
+            More than 5% of requests are returning 5xx errors for 2 minutes.
+            Current rate: {{ $value | humanizePercentage }}.
+            Check /actuator/health and application logs.
+
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            rate(http_server_requests_seconds_bucket[5m])
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 latency high: {{ $value }}s"
+          description: >
+            99th percentile latency exceeds 2 seconds for 5 minutes.
+            Check: Razorpay circuit breaker, DB connection pool, Kafka consumer lag.
+
+      - alert: ServiceDown
+        expr: up{job="city-app-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "City App backend is down"
+          description: >
+            Prometheus cannot reach /actuator/prometheus.
+            The application is either down or unreachable.
+
+  # ── Circuit Breakers ────────────────────────────────────────────────────────
+  - name: circuit_breakers
+    rules:
+
+      - alert: RazorpayCircuitOpen
+        expr: |
+          resilience4j_circuitbreaker_state{name="razorpay",state="open"} == 1
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Razorpay circuit breaker OPEN"
+          description: >
+            Razorpay payment gateway is not responding.
+            Checkouts are falling back to COD automatically.
+            Check: https://status.razorpay.com
+
+      - alert: CircuitBreakerHighFailureRate
+        expr: |
+          rate(resilience4j_circuitbreaker_calls_total{kind="failed"}[5m])
+          /
+          rate(resilience4j_circuitbreaker_calls_total[5m])
+          > 0.3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} failure rate > 30%"
+
+  # ── Kafka Consumer Lag ──────────────────────────────────────────────────────
+  - name: kafka_health
+    rules:
+
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          kafka_consumer_fetch_manager_records_lag_max > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag is {{ $value }} messages"
+          description: >
+            Notification-service is falling behind on Kafka messages.
+            Orders may be placed without confirmation notifications.
+            Check: notification-service memory and CPU.
+
+  # ── JVM Health ──────────────────────────────────────────────────────────────
+  - name: jvm_health
+    rules:
+
+      - alert: HighMemoryUsage
+        expr: |
+          (jvm_memory_used_bytes{area="heap"}
+           / jvm_memory_max_bytes{area="heap"})
+          > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM heap usage > 85%"
+          description: >
+            JVM heap is {{ $value | humanizePercentage }} full.
+            Risk of OutOfMemoryError. Check for memory leaks.
+
+      - alert: HighGCPauseTime
+        expr: |
+          rate(jvm_gc_pause_seconds_sum[5m]) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High GC pause time: {{ $value }}s/s"
+
+  # ── Database ─────────────────────────────────────────────────────────────────
+  - name: database_health
+    rules:
+
+      - alert: DBConnectionPoolExhausted
+        expr: |
+          hikaricp_connections_pending > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} DB connections waiting (pool exhausted)"
+          description: >
+            HikariCP connection pool is full. {{ $value }} requests waiting for a DB connection.
+            Check: slow queries, N+1 queries, missing indexes.
+            Increase pool size or optimise queries.
+
+  # ── Redis ─────────────────────────────────────────────────────────────────────
+  - name: redis_health
+    rules:
+
+      - alert: RedisHighMemory
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory > 80%"
+          description: >
+            Redis will start evicting keys when memory is full.
+            Cart data and cache entries may be lost.
+
+  # ── Outbox ────────────────────────────────────────────────────────────────────
+  - name: outbox_health
+    rules:
+
+      - alert: OutboxEventsFailed
+        expr: |
+          outbox_events_failed_total > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} outbox events permanently FAILED"
+          description: >
+            Some Kafka events could not be delivered after maximum retries.
+            Orders may be placed without notifications.
+            Use GET /api/v1/admin/outbox/failed to inspect.
+            Use POST /api/v1/admin/outbox/replay-all to retry.
