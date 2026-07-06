@@ -1,0 +1,47 @@
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+  # Tracks how far into each log file Promtail has read.
+  # Survives Promtail restarts: picks up where it left off.
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Tail the application log file
+  - job_name: "city-app"
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job:      "city-app-backend"
+          env:      "dev"
+          __path__: "/var/log/app/*.log"
+          # This path is mounted as a Docker volume.
+          # The application writes logs/application.log.
+          # Promtail reads from this path and pushes to Loki.
+
+    pipeline_stages:
+      # Parse JSON log lines
+      - json:
+          expressions:
+            level:     level
+            traceId:   traceId
+            spanId:    spanId
+            logger:    logger
+            message:   message
+            requestId: requestId
+            userId:    userId
+            orderId:   orderId
+
+      # Promote parsed fields to Loki labels (for fast querying)
+      - labels:
+          level:
+          traceId:
+
+      # Use timestamp from the log (not the time Promtail received it)
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano

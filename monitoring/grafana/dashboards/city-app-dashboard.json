@@ -1,0 +1,238 @@
+{
+  "title": "City App — System Health",
+  "uid": "cityapp-main",
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "🚦 Request Rate",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rate(http_server_requests_seconds_count{job='city-app-backend'}[5m])",
+        "legendFormat": "requests/sec"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 50},
+              {"color": "red", "value": 200}
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 2,
+      "title": "❌ Error Rate",
+      "type": "stat",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rate(http_server_requests_seconds_count{status=~'5..',job='city-app-backend'}[5m]) / rate(http_server_requests_seconds_count{job='city-app-backend'}[5m])",
+        "legendFormat": "error rate"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.01},
+              {"color": "red", "value": 0.05}
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 3,
+      "title": "⏱️ P99 Latency",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "histogram_quantile(0.99, rate(http_server_requests_seconds_bucket{job='city-app-backend'}[5m]))",
+        "legendFormat": "p99"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.5},
+              {"color": "red", "value": 2.0}
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 4,
+      "title": "🔌 Active DB Connections",
+      "type": "stat",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "hikaricp_connections_active",
+        "legendFormat": "active"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 15},
+              {"color": "red", "value": 23}
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 5,
+      "title": "📈 Request Rate by Endpoint",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "topk(10, rate(http_server_requests_seconds_count{job='city-app-backend'}[5m]))",
+        "legendFormat": "{{uri}} {{method}}"
+      }],
+      "fieldConfig": {"defaults": {"unit": "reqps"}}
+    },
+
+    {
+      "id": 6,
+      "title": "🔴 Error Rate Over Time",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{status=~'5..',job='city-app-backend'}[5m])",
+          "legendFormat": "5xx errors"
+        },
+        {
+          "expr": "rate(http_server_requests_seconds_count{status=~'4..',job='city-app-backend'}[5m])",
+          "legendFormat": "4xx errors"
+        }
+      ]
+    },
+
+    {
+      "id": 7,
+      "title": "⚡ Circuit Breaker States",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 6},
+      "targets": [{
+        "expr": "resilience4j_circuitbreaker_state",
+        "legendFormat": "{{name}}"
+      }],
+      "transformations": [
+        {"id": "organize", "options": {
+          "renameByName": {"name": "Service", "state": "State", "Value": "Open?"}
+        }}
+      ]
+    },
+
+    {
+      "id": 8,
+      "title": "🗄️ Cache Hit Rate",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 6},
+      "targets": [
+        {
+          "expr": "rate(cache_gets_total{result='hit'}[5m]) / rate(cache_gets_total[5m])",
+          "legendFormat": "{{cache}} hit rate"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit"}}
+    },
+
+    {
+      "id": 9,
+      "title": "🐘 JVM Memory",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 18, "w": 12, "h": 6},
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{area='heap'}",
+          "legendFormat": "Heap Used"
+        },
+        {
+          "expr": "jvm_memory_max_bytes{area='heap'}",
+          "legendFormat": "Heap Max"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    },
+
+    {
+      "id": 10,
+      "title": "📦 Kafka Consumer Lag",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 18, "w": 12, "h": 6},
+      "targets": [{
+        "expr": "kafka_consumer_fetch_manager_records_lag_max",
+        "legendFormat": "{{group}}"
+      }]
+    },
+
+    {
+      "id": 11,
+      "title": "💳 Payment Funnel",
+      "type": "bargauge",
+      "gridPos": {"x": 0, "y": 24, "w": 8, "h": 6},
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{uri='/api/v1/cart/{storeId}/checkout',status='201'}[5m])",
+          "legendFormat": "Checkouts"
+        },
+        {
+          "expr": "rate(http_server_requests_seconds_count{uri='/api/v1/payments/initiate',status='200'}[5m])",
+          "legendFormat": "Payment Initiated"
+        }
+      ]
+    },
+
+    {
+      "id": 12,
+      "title": "📬 Outbox Queue Depth",
+      "type": "stat",
+      "gridPos": {"x": 8, "y": 24, "w": 8, "h": 6},
+      "targets": [
+        {
+          "expr": "outbox_events_pending_total",
+          "legendFormat": "Pending"
+        },
+        {
+          "expr": "outbox_events_failed_total",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+
+    {
+      "id": 13,
+      "title": "🔄 DB Connection Pool",
+      "type": "timeseries",
+      "gridPos": {"x": 16, "y": 24, "w": 8, "h": 6},
+      "targets": [
+        {"expr": "hikaricp_connections_active", "legendFormat": "Active"},
+        {"expr": "hikaricp_connections_idle", "legendFormat": "Idle"},
+        {"expr": "hikaricp_connections_pending", "legendFormat": "Waiting (CRITICAL)"}
+      ]
+    }
+
+  ],
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "Asia/Kolkata",
+  "version": 1
+}

@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.MDC;
 
 import com.cityapp.common.constants.AppConstants;
 import com.cityapp.common.event.EventPublisher;
@@ -177,6 +178,11 @@ public class OrderService {
                 .build();
 
         Order savedOrder = orderRepository.save(order);
+
+        MDC.put("orderId", String.valueOf(savedOrder.getId()));
+        MDC.put("userId",  String.valueOf(buyer.getId()));
+        MDC.put("storeId", String.valueOf(req.getStoreId()));
+
         log.info("Order created: id={} buyer={} store={} total={}",
                 savedOrder.getId(), buyer.getEmail(),
                 store.getName(), total);

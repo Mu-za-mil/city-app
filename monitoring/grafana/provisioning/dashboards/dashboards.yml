@@ -1,0 +1,8 @@
+Where: monitoring/grafana/provisioning/dashboards/dashboards.yml
+apiVersion: 1
+
+providers:
+  - name: "City App Dashboards"
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

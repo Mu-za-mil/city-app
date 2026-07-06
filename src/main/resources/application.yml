@@ -66,6 +66,9 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      observation-enabled: true
+      # Enable tracing for Kafka producers.
+      # Spring Kafka: automatically injects B3 trace headers into every message.
       properties:
         spring.json.add.type.headers: true
         # WHY true: include the message type in Kafka headers so consumers
@@ -77,6 +80,7 @@ spring:
         linger.ms: 5
         # WHY linger.ms 5: wait 5ms before sending to batch multiple messages.
         # A small latency increase (5ms) for a significant throughput improvement.
+
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
@@ -98,21 +102,25 @@ spring:
           # Processing 100 events at once = 100 concurrent lock acquisitions.
           # Small batch = controlled lock pressure.
 
-        listener:
-            # Ack mode: MANUAL_IMMEDIATE — commit offset only after processing.
-            # WHY NOT AUTO: Auto-commit commits offset before we finish processing.
-            # Consumer crashes after auto-commit but before completing:
-            # Message is lost (offset already committed).
-            # MANUAL_IMMEDIATE: commit offset explicitly after processing.
-            # If we forget to commit: message re-delivered on restart. Safe.
-            ack-mode: BATCH
-            # BATCH: commit after each batch is fully processed.
-            # Simpler than MANUAL_IMMEDIATE. Slightly less granular.
-            # For our saga consumers: batch of events, commit when all processed.
-            concurrency: 3
-            # 3 concurrent listener threads per topic.
-            # Matches our 3 partitions per topic.
-            # Each thread handles one partition. Maximum parallelism.
+    listener:
+      # Ack mode: MANUAL_IMMEDIATE — commit offset only after processing.
+      # WHY NOT AUTO: Auto-commit commits offset before we finish processing.
+      # Consumer crashes after auto-commit but before completing:
+      # Message is lost (offset already committed).
+      # MANUAL_IMMEDIATE: commit offset explicitly after processing.
+      # If we forget to commit: message re-delivered on restart. Safe.
+      ack-mode: BATCH
+      # BATCH: commit after each batch is fully processed.
+      # Simpler than MANUAL_IMMEDIATE. Slightly less granular.
+      # For our saga consumers: batch of events, commit when all processed.
+      concurrency: 3
+      # 3 concurrent listener threads per topic.
+      # Matches our 3 partitions per topic.
+      # Each thread handles one partition. Maximum parallelism.
+      observation-enabled: true
+      # Enable tracing for Kafka consumers.
+      # Spring Kafka: automatically extracts B3 headers from messages.
+      # Creates child spans. Reports to Zipkin.
 
   # ── MAIL ────────────────────────────────────────────────────────────────
   mail:

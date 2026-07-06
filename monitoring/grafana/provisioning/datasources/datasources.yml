@@ -1,0 +1,34 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: "15s"
+      exemplarTraceIdDestinations:
+        - name: traceId
+          datasourceUid: zipkin
+          # Links Prometheus exemplars to Zipkin traces
+          # Click on a data point → jump to the trace for that request
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - datasourceUid: zipkin
+          matcherRegex: '"traceId":"(\w+)"'
+          name: TraceID
+          url: '$${__value.raw}'
+          # In Loki log lines: click on traceId → open in Zipkin
+          # Connect logs to traces in one click
+
+  - name: Zipkin
+    type: zipkin
+    access: proxy
+    url: http://zipkin:9411
+    uid: zipkin

@@ -1,8 +1,38 @@
-global:
-  scrape_interval: 15s  # How often to collect metrics
+# Prometheus configuration
 
+global:
+  scrape_interval:     15s   # Scrape metrics every 15 seconds
+  evaluation_interval: 15s   # Evaluate alert rules every 15 seconds
+
+# Alert rules file
+rule_files:
+  - "alert_rules.yml"
+
+# Alertmanager integration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+# Metrics collection targets
 scrape_configs:
-  - job_name: 'city-app-backend'
+
+  # ── Spring Boot Application ─────────────────────────────────────────────
+  - job_name: "city-app-backend"
     static_configs:
-      - targets: ['host.docker.internal:8080']
-    metrics_path: '/actuator/prometheus'
+      - targets: ["host.docker.internal:8080"]
+        # host.docker.internal: from inside Docker, reach the host machine.
+        # The Spring Boot app runs on the host (not in Docker).
+        # host.docker.internal resolves to the host's IP from within Docker.
+    metrics_path: "/actuator/prometheus"
+    # Spring Boot Actuator exposes metrics in Prometheus format at this path.
+    scrape_interval: 15s
+
+  # ── Prometheus Self-Monitoring ──────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── When the app runs in Docker (Phase 16 Kubernetes) ───────────────────
+  # Kubernetes: use kubernetes_sd_configs for dynamic discovery.
+  # For now: static targets suffice.

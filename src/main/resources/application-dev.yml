@@ -51,6 +51,8 @@ management:
       # In production: 5% (0.05) to avoid Zipkin storage costs
 
 logging:
+  file:
+    name: logs/application.log
   level:
     com.cityapp: DEBUG
     org.hibernate.SQL: DEBUG
