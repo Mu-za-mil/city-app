@@ -1,6 +1,6 @@
 global:
   # Default email settings
-  smtp_smarthost: 'localhost:1025'   # MailHog in dev
+  smtp_smarthost: 'mailhog:1025'   # MailHog in dev
   smtp_from: 'alertmanager@cityapp.com'
   smtp_require_tls: false
 
@@ -24,8 +24,11 @@ receivers:
   - name: 'email-team'
     email_configs:
       - to: 'oncall@cityapp.com'
-        subject: '[CityApp Alert] {{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
-        body: |
+        send_resolved: true
+        require_tls: false
+        headers:
+          subject: '[CityApp Alert]'
+        text: |
           {{ range .Alerts }}
           Alert: {{ .Annotations.summary }}
           Description: {{ .Annotations.description }}
