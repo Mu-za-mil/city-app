@@ -1,0 +1,31 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    # In production: set to true for peer-to-peer cluster replication
+    enable-self-preservation: false
+    # Self-preservation: prevents mass de-registration during network partition.
+    # Disabled in dev: instances de-register immediately when they stop.
+    # Enabled in prod: prevents accidental mass de-registration during network issues.
+    eviction-interval-timer-in-ms: 5000
+    # Check for expired registrations every 5 seconds.
+    # Default: 60 seconds (too slow for dev).
+
+# Disable Eureka's own Eureka client (it's a server, not a client)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
