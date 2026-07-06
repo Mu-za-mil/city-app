@@ -150,6 +150,7 @@ services:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus_data:/prometheus
     networks:
       - cityapp-network
@@ -188,7 +189,7 @@ services:
     volumes:
       - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
       - ./logs:/var/log/app     # Mount application log directory
-    command: -config.file=/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml -log.level=debug
     depends_on:
       - loki
     networks:
@@ -209,11 +210,12 @@ services:
       - cityapp-network
 
 volumes:
+  loki_data:
   postgres_data:
   redis_data:
   prometheus_data:
   grafana_data:
-  loki_data:
+
 
 networks:
   cityapp-network:
