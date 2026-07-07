@@ -1,6 +1,6 @@
 spring:
   application:
-    name: city-app-backend
+    name: main-service
 
 
   # ── DATABASE ────────────────────────────────────────────────────────────
@@ -135,6 +135,15 @@ spring:
   # ── CACHE ───────────────────────────────────────────────────────────────
   cache:
     type: redis
+
+# ── Eureka ──────────────────────────────────────────────────────────────
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
+  instance:
+    lease-renewal-interval-in-seconds: 5
+
 
 # ── Resilience4j ──────────────────────────────────────────────────────────────
 resilience4j:
