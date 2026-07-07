@@ -1,4 +1,4 @@
-package com.cityapp.user.service;
+package com.cityapp.auth.service;
 
 import com.cityapp.auth.entity.RefreshToken;
 import com.cityapp.auth.service.RefreshTokenService;
