@@ -1,3 +1,52 @@
+server:
+  port: 8081
+
 spring:
   application:
     name: auth-service
+    # This is the name registered in Eureka.
+    # API Gateway routes /api/v1/auth/** to lb://auth-service.
+    # The names must match exactly.
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cityapp}
+    username: ${DB_USERNAME:cityapp}
+    password: ${DB_PASSWORD:cityapp}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    # SHARES THE SAME DATABASE as main-service.
+    # Both services use the same PostgreSQL instance.
+    # This is ALLOWED during the strangler fig extraction phase.
+    # Eventually (Phase 17): auth-service gets its own dedicated DB.
+    # For now: shared DB is simpler and correct.
+
+# Eureka registration
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
+  instance:
+    instance-id: ${spring.application.name}:${server.port}
+    # Unique instance ID: "auth-service:8081"
+    # If running 3 instances: "auth-service:8081", "auth-service:8082", "auth-service:8083"
+    lease-renewal-interval-in-seconds: 5
+
+# JWT config
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiry: 900000    # 15 minutes
+    refresh-token-expiry: 2592000000  # 30 days
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
