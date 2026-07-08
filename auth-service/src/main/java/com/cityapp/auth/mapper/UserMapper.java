@@ -1,8 +1,8 @@
-package com.cityapp.user.mapper;
+package com.cityapp.auth.mapper;
 
-import com.cityapp.user.dto.RegisterRequest;
-import com.cityapp.user.dto.UserResponse;
-import com.cityapp.user.entity.User;
+import com.cityapp.auth.dto.RegisterRequest;
+import com.cityapp.auth.dto.UserResponse;
+import com.cityapp.auth.entity.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 

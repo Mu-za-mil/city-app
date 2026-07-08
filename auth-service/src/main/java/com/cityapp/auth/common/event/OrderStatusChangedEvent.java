@@ -1,4 +1,4 @@
-package com.cityapp.common.event;
+package com.cityapp.auth.common.event;
 
 import com.cityapp.order.entity.OrderStatus;
 import lombok.*;

@@ -1,4 +1,4 @@
-package com.cityapp.common.response;
+package com.cityapp.auth.common.response;
 
 import lombok.Builder;
 import lombok.Getter;

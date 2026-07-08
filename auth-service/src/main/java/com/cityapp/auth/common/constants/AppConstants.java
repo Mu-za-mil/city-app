@@ -1,4 +1,4 @@
-package com.cityapp.common.constants;
+package com.cityapp.auth.common.constants;
 
 /**
  * Application-wide constants.

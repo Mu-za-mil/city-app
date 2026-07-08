@@ -1,6 +1,6 @@
-package com.cityapp.common.exception;
+package com.cityapp.auth.common.exception;
 
-import com.cityapp.common.response.ApiResponse;
+import com.cityapp.auth.common.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

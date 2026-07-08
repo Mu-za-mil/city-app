@@ -1,6 +1,6 @@
-package com.cityapp.common.event;
+package com.cityapp.auth.common.event;
 
-import com.cityapp.common.constants.AppConstants;
+import com.cityapp.auth.common.constants.AppConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;

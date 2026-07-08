@@ -1,4 +1,4 @@
-package com.cityapp.common.exception;
+package com.cityapp.auth.common.exception;
 
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
