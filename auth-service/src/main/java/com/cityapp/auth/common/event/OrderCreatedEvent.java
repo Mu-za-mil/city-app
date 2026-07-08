@@ -1,6 +1,6 @@
 package com.cityapp.auth.common.event;
 
-import com.cityapp.order.entity.OrderType;
+import com.cityapp.auth.entity.OrderType;
 import lombok.*;
 
 import java.math.BigDecimal;

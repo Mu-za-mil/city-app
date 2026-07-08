@@ -1,6 +1,6 @@
 package com.cityapp.auth.common.event;
 
-import com.cityapp.order.entity.OrderStatus;
+import com.cityapp.auth.entity.OrderStatus;
 import lombok.*;
 import java.time.Instant;
 
