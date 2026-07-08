@@ -2,7 +2,7 @@ package com.cityapp.auth.controller;
 
 import com.cityapp.auth.entity.RefreshToken;
 import com.cityapp.auth.service.RefreshTokenService;
-import com.cityapp.common.response.ApiResponse;
+import com.cityapp.auth.common.response.ApiResponse;
 import com.cityapp.auth.dto.*;
 import com.cityapp.auth.entity.User;
 import com.cityapp.auth.service.OtpService;

@@ -1,7 +1,7 @@
 package com.cityapp.auth.repository;
 
-import com.cityapp.user.entity.User;
-import com.cityapp.user.entity.Role;
+import com.cityapp.auth.entity.User;
+import com.cityapp.auth.entity.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

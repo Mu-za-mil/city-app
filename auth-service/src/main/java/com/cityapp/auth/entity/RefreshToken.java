@@ -1,6 +1,6 @@
 package com.cityapp.auth.entity;
 
-import com.cityapp.user.entity.User;
+import com.cityapp.auth.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;

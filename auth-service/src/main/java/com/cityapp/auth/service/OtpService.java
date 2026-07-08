@@ -2,19 +2,16 @@ package com.cityapp.auth.service;
 
 import com.cityapp.auth.entity.RefreshToken;
 import jakarta.servlet.http.HttpServletRequest;
-import com.cityapp.auth.service.RefreshTokenService;
-import com.cityapp.common.constants.AppConstants;
-import com.cityapp.common.exception.AppException;
+import com.cityapp.auth.common.constants.AppConstants;
+import com.cityapp.auth.common.exception.AppException;
 import com.cityapp.notification.service.EmailService;
-import com.cityapp.security.service.JwtService;
-import com.cityapp.user.dto.AuthResponse;
-import com.cityapp.user.dto.VerifyOtpRequest;
-import com.cityapp.user.entity.User;
-import com.cityapp.user.repository.UserRepository;
+import com.cityapp.auth.dto.AuthResponse;
+import com.cityapp.auth.dto.VerifyOtpRequest;
+import com.cityapp.auth.entity.User;
+import com.cityapp.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;

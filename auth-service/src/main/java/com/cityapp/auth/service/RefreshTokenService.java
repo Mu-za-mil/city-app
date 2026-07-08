@@ -1,10 +1,11 @@
 package com.cityapp.auth.service;
 
+import com.cityapp.auth.common.constants.AppConstants;
 import com.cityapp.auth.entity.RefreshToken;
 import com.cityapp.auth.repository.RefreshTokenRepository;
-import com.cityapp.common.constants.AppConstants;
-import com.cityapp.common.exception.AppException;
-import com.cityapp.user.entity.User;
+import com.cityapp.auth.common.constants.AppConstants;
+import com.cityapp.auth.common.exception.AppException;
+import com.cityapp.auth.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

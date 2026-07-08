@@ -1,6 +1,6 @@
 package com.cityapp.auth.dto;
 
-import com.cityapp.user.entity.Role;
+import com.cityapp.auth.entity.Role;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.Setter;
