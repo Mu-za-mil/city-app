@@ -1,11 +1,12 @@
 package com.cityapp.auth.controller;
 
-import com.cityapp.auth.entity.RefreshToken;
-import com.cityapp.auth.service.RefreshTokenService;
 import com.cityapp.auth.common.response.ApiResponse;
 import com.cityapp.auth.dto.*;
+import com.cityapp.auth.entity.RefreshToken;
 import com.cityapp.auth.entity.User;
 import com.cityapp.auth.service.OtpService;
+import com.cityapp.auth.service.RefreshTokenService;
+
 import com.cityapp.auth.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -25,7 +26,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final UserService         userService;
+    private final UserService userService;
     private final RefreshTokenService refreshTokenService;
     private final OtpService otpService;
 

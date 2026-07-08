@@ -1,17 +1,16 @@
 package com.cityapp.auth.service;
 
-import com.cityapp.auth.entity.RefreshToken;
-import com.cityapp.auth.service.RefreshTokenService;
 import com.cityapp.auth.common.event.EventPublisher;
 import com.cityapp.auth.common.event.UserRegisteredEvent;
 import com.cityapp.auth.common.exception.AppException;
 import com.cityapp.auth.common.response.PageResponse;
-import com.cityapp.auth.service.JwtService;
 import com.cityapp.auth.dto.*;
+import com.cityapp.auth.entity.RefreshToken;
 import com.cityapp.auth.entity.Role;
 import com.cityapp.auth.entity.User;
 import com.cityapp.auth.mapper.UserMapper;
 import com.cityapp.auth.repository.UserRepository;
+import com.cityapp.auth.service.RefreshTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -66,8 +65,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserService implements UserDetailsService {
 
-    private final UserRepository  userRepository;
-    private final UserMapper      userMapper;
+    private final UserRepository userRepository;
+    private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
