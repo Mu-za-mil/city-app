@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Your OTP</title>
+    <style>
+        body { margin:0; padding:0; font-family:'Segoe UI',Arial,sans-serif;
+            background:#f5f5f5; }
+        .container { max-width:500px; margin:30px auto; background:#fff;
+            border-radius:12px; overflow:hidden;
+            box-shadow:0 4px 20px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg,#6366f1,#4f46e5);
+            padding:32px; text-align:center; }
+        .header h1 { color:#fff; margin:0; }
+        .content { padding:32px; text-align:center; }
+        .otp-box { background:#f0f0ff; border-radius:12px; padding:24px;
+            margin:24px 0; }
+        .otp-code { font-size:48px; font-weight:900; color:#4f46e5;
+            letter-spacing:12px; display:block; }
+        .expiry { color:#999; font-size:13px; margin-top:8px; }
+        .warning { background:#fff7ed; border:1px solid #fbbf24;
+            border-radius:8px; padding:12px; margin:16px 0;
+            font-size:13px; color:#92400e; }
+        .footer { background:#f8f8f8; padding:16px; text-align:center;
+            color:#999; font-size:12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div style="font-size:32px;">🔐</div>
+        <h1>Your Verification Code</h1>
+    </div>
+    <div class="content">
+        <p>Hi <strong th:text="${userName}">there</strong>,</p>
+        <p>Use this one-time code to verify your City App account:</p>
+
+        <div class="otp-box">
+            <span class="otp-code" th:text="${otp}">123456</span>
+            <span class="expiry">Expires in <span th:text="${expiry}">5 minutes</span></span>
+        </div>
+
+        <div class="warning">
+            🔒 Never share this code with anyone.
+            City App will never ask for your OTP by phone or email.
+        </div>
+    </div>
+    <div class="footer">
+        <p>© <span th:text="${year}">2025</span> City App</p>
+        <p>If you didn't request this, please ignore this email.</p>
+    </div>
+</div>
+</body>
+</html>
