@@ -17,7 +17,7 @@ services:
   eureka-server:
     build:
       context: ./eureka-server
-      dockerfile: Dockerfile
+      dockerfile: city-app-backend/Dockerfile
     container_name: cityapp-eureka
     ports:
       - "8761:8761"
@@ -35,7 +35,7 @@ services:
   api-gateway:
     build:
       context: ./api-gateway
-      dockerfile: Dockerfile
+      dockerfile: city-app-backend/Dockerfile
     container_name: cityapp-gateway
     ports:
       - "8000:8000"
@@ -54,7 +54,7 @@ services:
   auth-service:
     build:
       context: ./auth-service
-      dockerfile: Dockerfile
+      dockerfile: city-app-backend/Dockerfile
     container_name: cityapp-auth
     ports:
       - "8081:8081"
@@ -75,7 +75,7 @@ services:
   notification-service:
     build:
       context: ./notification-service
-      dockerfile: Dockerfile
+      dockerfile: city-app-backend/Dockerfile
     container_name: cityapp-notification
     ports:
       - "8083:8083"
@@ -97,7 +97,7 @@ services:
   main-service:
     build:
       context: ./city-app-backend
-      dockerfile: Dockerfile
+      dockerfile: city-app-backend/Dockerfile
     container_name: cityapp-main
     ports:
       - "8080:8080"
