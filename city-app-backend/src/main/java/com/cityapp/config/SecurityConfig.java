@@ -82,10 +82,10 @@ public class SecurityConfig {
 
                                 // ── PUBLIC endpoints (no JWT required) ────────────────────────
                                 .requestMatchers(
+                                        // Note: /api/v1/auth/** is now handled by auth-service.
+                                        // These rules are kept as fallback (direct calls, bypassing gateway).
                                         "/api/v1/auth/register",
                                         "/api/v1/auth/login",
-                                        "/api/v1/auth/otp/**",
-                                        "/api/v1/auth/refresh",
                                         "/api/v1/webhooks/**",
                                         "/api/v1/payments/webhooks/**",
                                         "/ws/**"
