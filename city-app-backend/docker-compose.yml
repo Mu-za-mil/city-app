@@ -13,6 +13,107 @@
 
 services:
 
+  # ── Eureka Service Registry ───────────────────────────────────────────────
+  eureka-server:
+    build:
+      context: ./eureka-server
+      dockerfile: Dockerfile
+    container_name: cityapp-eureka
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - cityapp-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8761/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── API Gateway ────────────────────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: cityapp-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - EUREKA_HOST=eureka-server
+      - REDIS_HOST=cityapp-redis
+      - JWT_SECRET=${JWT_SECRET}
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - cityapp-network
+
+  # ── Auth Service ───────────────────────────────────────────────────────────
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: cityapp-auth
+    ports:
+      - "8081:8081"
+    environment:
+      - EUREKA_HOST=eureka-server
+      - DB_URL=jdbc:postgresql://cityapp-postgres:5432/cityapp
+      - REDIS_HOST=cityapp-redis
+      - KAFKA_BROKERS=cityapp-kafka:9092
+      - JWT_SECRET=${JWT_SECRET}
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - cityapp-network
+
+  # ── Notification Service ───────────────────────────────────────────────────
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: cityapp-notification
+    ports:
+      - "8083:8083"
+    environment:
+      - EUREKA_HOST=eureka-server
+      - DB_URL=jdbc:postgresql://cityapp-postgres:5432/cityapp
+      - REDIS_HOST=cityapp-redis
+      - KAFKA_BROKERS=cityapp-kafka:9092
+      - MAIL_HOST=cityapp-mailhog
+      - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:}
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - cityapp-network
+
+  # ── Main Service (Monolith — remaining modules) ───────────────────────────
+  main-service:
+    build:
+      context: ./city-app-backend
+      dockerfile: Dockerfile
+    container_name: cityapp-main
+    ports:
+      - "8080:8080"
+    environment:
+      - EUREKA_HOST=eureka-server
+      - DB_URL=jdbc:postgresql://cityapp-postgres:5432/cityapp
+      - REDIS_HOST=cityapp-redis
+      - KAFKA_BROKERS=cityapp-kafka:9092
+      - JWT_SECRET=${JWT_SECRET}
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - cityapp-network
+
   # ── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
     image: postgis/postgis:16-3.4
