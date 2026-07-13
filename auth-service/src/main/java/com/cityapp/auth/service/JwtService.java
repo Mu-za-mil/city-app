@@ -1,6 +1,6 @@
 package com.cityapp.auth.service;
 
-import com.cityapp.auth.common.constants.AppConstants;
+import com.cityapp.common.constants.AppConstants;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;

@@ -1,12 +1,12 @@
 package com.cityapp.auth.service;
 
-import com.cityapp.auth.common.event.EventPublisher;
-import com.cityapp.auth.common.event.UserRegisteredEvent;
-import com.cityapp.auth.common.exception.AppException;
-import com.cityapp.auth.common.response.PageResponse;
+import com.cityapp.common.event.EventPublisher;
+import com.cityapp.common.event.UserRegisteredEvent;
+import com.cityapp.common.exception.AppException;
+import com.cityapp.common.response.PageResponse;
 import com.cityapp.auth.dto.*;
 import com.cityapp.auth.entity.RefreshToken;
-import com.cityapp.auth.entity.Role;
+import com.cityapp.common.enums.Role;
 import com.cityapp.auth.entity.User;
 import com.cityapp.auth.mapper.UserMapper;
 import com.cityapp.auth.repository.UserRepository;
