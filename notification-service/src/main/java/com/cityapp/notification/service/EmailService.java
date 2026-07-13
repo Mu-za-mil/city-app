@@ -1,7 +1,7 @@
 package com.cityapp.notification.service;
 
 import com.cityapp.common.event.OrderCreatedEvent;
-import com.cityapp.user.repository.UserRepository;
+import com.cityapp.notification.repository.UserRepository;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;

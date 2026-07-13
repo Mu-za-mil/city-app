@@ -1,5 +1,10 @@
 package com.cityapp.notification.service;
 
+import com.cityapp.common.event.DeliveryAssignedEvent;
+import com.cityapp.common.event.InventoryLowEvent;
+import com.cityapp.common.event.OrderCreatedEvent;
+import com.cityapp.common.event.OtpRequestEvent;
+import com.cityapp.common.event.UserRegisteredEvent;
 import com.cityapp.notification.entity.Notification;
 import com.cityapp.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
@@ -103,6 +108,15 @@ public class NotificationService {
 
     public void sendSellerOnboardingEmail(UserRegisteredEvent event) {
         emailService.sendSellerOnboardingEmail(event.getEmail(), event.getName());
+    }
+
+    public void sendOtpEmail(OtpRequestEvent event) {
+        try {
+            emailService.sendOtpEmail(event.getEmail(), event.getName(), event.getOtp());
+        } catch (Exception e) {
+            log.error("Failed to send OTP email: email={} error={}",
+                    event.getEmail(), e.getMessage());
+        }
     }
 
     // ── Inventory Notifications ───────────────────────────────────────────────

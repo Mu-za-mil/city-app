@@ -2,9 +2,10 @@ package com.cityapp.auth.service;
 
 import com.cityapp.auth.entity.RefreshToken;
 import jakarta.servlet.http.HttpServletRequest;
-import com.cityapp.auth.common.constants.AppConstants;
-import com.cityapp.auth.common.exception.AppException;
-import com.cityapp.notification.service.EmailService;
+import com.cityapp.common.constants.AppConstants;
+import com.cityapp.common.exception.AppException;
+import com.cityapp.common.event.EventPublisher;
+import com.cityapp.common.event.OtpRequestEvent;
 import com.cityapp.auth.dto.AuthResponse;
 import com.cityapp.auth.dto.VerifyOtpRequest;
 import com.cityapp.auth.entity.User;
@@ -25,7 +26,7 @@ public class OtpService {
 
     private final StringRedisTemplate redisTemplate;
     private final UserRepository userRepository;
-    private final EmailService emailService;
+    private final EventPublisher eventPublisher;
     private final RefreshTokenService refreshTokenService;
     private final JwtService jwtService;
 
@@ -49,13 +50,19 @@ public class OtpService {
         String otpKey = AppConstants.REDIS_OTP_PREFIX + phone;
         redisTemplate.opsForValue().set(otpKey, otp, AppConstants.OTP_EXPIRY_SECONDS, TimeUnit.SECONDS);
 
-        // 4. Find the user by phone to get their email
+        // 4. Find the user by phone and publish an OTP request event for email delivery
         User user = userRepository.findByPhone(phone).orElse(null);
         if (user != null) {
-            emailService.sendOtpEmail(user.getEmail(), user.getName(), otp);
-            log.info("OTP sent via email to {} for phone {}", user.getEmail(), phone);
+            eventPublisher.publishOtpRequested(
+                    OtpRequestEvent.builder()
+                            .eventId(EventPublisher.generateEventId())
+                            .email(user.getEmail())
+                            .name(user.getName())
+                            .otp(otp)
+                            .build());
+            log.info("OTP request published for email={} phone={}", user.getEmail(), phone);
         } else {
-            log.debug("OTP generated for phone {} but no user found; email not sent", phone);
+            log.debug("OTP generated for phone {} but no user found; email event not published", phone);
         }
 
         // 5. (Optional) Send SMS if enabled – you can call SmsService here.

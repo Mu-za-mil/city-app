@@ -1,14 +1,16 @@
 package com.cityapp.common.event;
 
-import com.cityapp.common.constants.AppConstants;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
 
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import com.cityapp.common.constants.AppConstants;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Central publisher for all Kafka events.
@@ -107,6 +109,14 @@ public class EventPublisher {
     public void publishReviewPosted(ReviewPostedEvent event) {
         publish(AppConstants.TOPIC_REVIEW_POSTED,
                 String.valueOf(event.getTargetId()), event);
+    }
+
+     public void publishOtpRequested(OtpRequestEvent event) {
+        if (event.getEventId() == null) {
+            event.setEventId(generateEventId());
+        }
+        publish(AppConstants.TOPIC_OTP_REQUESTED,
+                String.valueOf(event.getEmail()), event);
     }
 
 

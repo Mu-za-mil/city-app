@@ -38,6 +38,7 @@ public interface AppConstants {
     String TOPIC_DELIVERY_ASSIGNED    = "delivery.assigned";
     String TOPIC_STORE_ANNOUNCEMENT   = "store.announcement";
     String TOPIC_REVIEW_POSTED        = "review.posted";
+    String TOPIC_OTP_REQUESTED         = "otp.requested";
 
     // ── Redis Key Prefixes ────────────────────────────────────────────────────
     // Naming convention: domain:entity:identifier
