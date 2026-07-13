@@ -4,7 +4,7 @@ import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.notification.dto.NotificationResponse;
 import com.cityapp.notification.service.InAppNotificationService;
-import com.cityapp.user.entity.User;
+import com.cityapp.notification.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

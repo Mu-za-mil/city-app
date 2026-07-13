@@ -1,6 +1,5 @@
 package com.cityapp.notification.entity;
 
-import com.cityapp.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -15,9 +14,8 @@ public class DeviceToken {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    private Long userId;
 
     @Column(nullable = false, unique = true, length = 500)
     private String token;

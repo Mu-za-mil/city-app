@@ -1,10 +1,10 @@
 package com.cityapp.notification.consumer;
 
 import com.cityapp.common.constants.AppConstants;
+import com.cityapp.common.enums.OrderStatus;
 import com.cityapp.common.event.OrderCreatedEvent;
 import com.cityapp.common.event.OrderStatusChangedEvent;
 import com.cityapp.notification.service.NotificationService;
-import com.cityapp.order.entity.OrderStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;

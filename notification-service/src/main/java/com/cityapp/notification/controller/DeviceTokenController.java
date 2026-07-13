@@ -3,7 +3,7 @@ package com.cityapp.notification.controller;
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.notification.entity.DeviceToken;
 import com.cityapp.notification.repository.DeviceTokenRepository;
-import com.cityapp.user.entity.User;
+import com.cityapp.notification.entity.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -52,7 +52,7 @@ public class DeviceTokenController {
                         },
                         () -> {
                             DeviceToken token = DeviceToken.builder()
-                                    .user(user)
+                                    .userId(user.getId())
                                     .token(req.getToken())
                                     .platform(req.getPlatform())
                                     .active(true)
