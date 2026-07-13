@@ -1,7 +1,5 @@
 package com.cityapp.user.service;
 
-import com.cityapp.auth.entity.RefreshToken;
-import com.cityapp.auth.service.RefreshTokenService;
 import com.cityapp.common.event.EventPublisher;
 import com.cityapp.common.event.UserRegisteredEvent;
 import com.cityapp.common.exception.AppException;
@@ -70,7 +68,6 @@ public class UserService implements UserDetailsService {
     private final UserMapper      userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final RefreshTokenService refreshTokenService;
     private final EventPublisher eventPublisher;
     // PasswordEncoder is a Spring Security bean defined in SecurityConfig (Phase 4).
     // We declare the dependency here. Spring will inject it.
@@ -132,102 +129,6 @@ public class UserService implements UserDetailsService {
         return userMapper.toResponse(saved);
     }
 
-    // ── Login ─────────────────────────────────────────────────────────────────
-
-    @Transactional
-    public AuthResponse login(LoginRequest req, HttpServletRequest httpRequest) {
-
-        // Step 1: Find user by email
-        User user = userRepository.findByEmail(req.getEmail())
-                .orElseThrow(() -> AppException.unauthorized(
-                        "Invalid email or password"));
-        // WHY same message for wrong email AND wrong password:
-        // "Email not found" tells attacker which emails are registered.
-        // "Invalid email or password" reveals nothing.
-        // This is user enumeration protection.
-
-        // Step 2: Check if account is enabled and not locked
-        if (!user.isEnabled()) {
-            throw AppException.unauthorized("Account has been suspended. Contact support.");
-        }
-        if (!user.isAccountNonLocked()) {
-            throw AppException.unauthorized("Account is locked. Contact support.");
-        }
-
-        // Step 3: Verify password
-        if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
-            throw AppException.unauthorized("Invalid email or password");
-            // SAME message as "email not found" — no information leakage
-        }
-
-        // Step 4: Generate access token (short-lived JWT)
-        String accessToken = jwtService.generateAccessToken(user);
-
-        // Step 5: Create refresh token (long-lived, stored in DB)
-        String deviceInfo = extractDeviceInfo(httpRequest);
-        String ipAddress  = extractClientIp(httpRequest);
-        String userAgent  = httpRequest.getHeader("User-Agent");
-
-        RefreshToken refreshToken = refreshTokenService
-                .createRefreshToken(user, deviceInfo, ipAddress, userAgent);
-
-        log.info("User logged in: id={} email={} device={}",
-                user.getId(), user.getEmail(), deviceInfo);
-
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken.getToken())
-                .accessTokenExpiresIn(900L)   // 15 minutes in seconds
-                .userId(user.getId())
-                .name(user.getName())
-                .email(user.getEmail())
-                .role(user.getRole())
-                .build();
-    }
-
-// ── Refresh Token Exchange ─────────────────────────────────────────────────
-
-    @Transactional
-    public AuthResponse refreshTokens(String refreshTokenValue) {
-        // Rotate the refresh token (old → new)
-        RefreshToken newRefreshToken = refreshTokenService.rotate(refreshTokenValue);
-
-        // Generate new access token for the user
-        String newAccessToken = jwtService.generateAccessToken(newRefreshToken.getUser());
-
-        return AuthResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(newRefreshToken.getToken())
-                .accessTokenExpiresIn(900L)
-                .userId(newRefreshToken.getUser().getId())
-                .name(newRefreshToken.getUser().getName())
-                .email(newRefreshToken.getUser().getEmail())
-                .role(newRefreshToken.getUser().getRole())
-                .build();
-    }
-
-// ── Logout ─────────────────────────────────────────────────────────────────
-
-    public void logout(String accessToken, String refreshTokenValue) {
-        // Blacklist the access token in Redis (prevents reuse before expiry)
-        if (accessToken != null && accessToken.startsWith("Bearer ")) {
-            jwtService.blacklist(accessToken.substring(7));
-        }
-        // Revoke the refresh token in DB
-        if (refreshTokenValue != null && !refreshTokenValue.isBlank()) {
-            refreshTokenService.revokeToken(refreshTokenValue);
-        }
-    }
-
-    public void logoutAll(Long userId, String accessToken) {
-        // Blacklist current access token
-        if (accessToken != null && accessToken.startsWith("Bearer ")) {
-            jwtService.blacklist(accessToken.substring(7));
-        }
-        // Revoke ALL refresh tokens for this user
-        int revoked = refreshTokenService.revokeAllForUser(userId);
-        log.info("User {} logged out from {} devices", userId, revoked);
-    }
 
     // ── Profile Operations ────────────────────────────────────────────────────
 
