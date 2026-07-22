@@ -12,7 +12,7 @@ spring:
     password: ${DB_PASSWORD:cityapp}
 
   kafka:
-    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    bootstrap-servers: ${KAFKA_BROKERS:cityapp-kafka:9092}
     consumer:
       group-id: notification-service
       auto-offset-reset: earliest
@@ -45,10 +45,17 @@ eureka:
 
 app:
   fcm:
-    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
+    credentials-path: ${APP_FCM_CREDENTIALS_PATH:-}
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
+
+logging:
+  level:
+    com.cityapp: INFO
+    org.hibernate.SQL: OFF
+    org.springframework.cache: WARN
+    org.springframework.boot.context.properties: DEBUG
