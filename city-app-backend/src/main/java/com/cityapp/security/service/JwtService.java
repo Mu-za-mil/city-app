@@ -93,7 +93,7 @@ public class JwtService {
                 .subject(userDetails.getUsername())   // email
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpirationMs))
-                .signWith(getSignKey())
+                .signWith(getSignKey(), Jwts.SIG.HS256)
                 .compact();
     }
 
