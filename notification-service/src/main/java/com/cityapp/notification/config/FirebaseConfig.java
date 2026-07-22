@@ -1,4 +1,4 @@
-package com.cityapp.config;
+package com.cityapp.notification.config;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
@@ -37,7 +37,7 @@ import java.io.InputStream;
 @Configuration
 public class FirebaseConfig {
 
-    @Value("${cityapp.fcm.credentials-path:}")
+    @Value("${app.fcm.credentials-path:}")
     private String credentialsPath;
 
     @Bean
