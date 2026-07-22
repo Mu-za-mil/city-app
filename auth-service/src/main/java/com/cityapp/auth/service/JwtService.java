@@ -54,10 +54,10 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class JwtService {
 
-    @Value("${cityapp.jwt.secret}")
+    @Value("${app.jwt.secret}")
     private String jwtSecret;
 
-    @Value("${cityapp.jwt.access-token-expiration-ms:900000}")
+    @Value("${app.jwt.access-token-expiration-ms:900000}")
     private long accessTokenExpirationMs;   // 15 minutes default
 
     private final StringRedisTemplate redisTemplate;
@@ -91,7 +91,7 @@ public class JwtService {
                 .subject(userDetails.getUsername())   // email
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpirationMs))
-                .signWith(getSignKey())
+                .signWith(getSignKey(), Jwts.SIG.HS256)
                 .compact();
     }
 
