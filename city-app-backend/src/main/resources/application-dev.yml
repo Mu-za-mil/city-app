@@ -6,7 +6,7 @@ cityapp:
   jwt:
     # Explicit dev-only secret. The word "dev_only" makes it obvious.
     # If this appears in production logs: something is seriously wrong.
-    secret: dev_only_secret_for_local_development_min32chars_long
+    secret: ${JWT_SECRET}
 
   razorpay:
     key-id:         ${RAZORPAY_KEY_ID:rzp_test_placeholder}
