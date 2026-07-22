@@ -148,6 +148,17 @@
         <logger name="org.springframework.security" level="WARN"/>
     </springProfile>
 
+    <!-- Docker profile: human-readable console -->
+    <springProfile name="docker">
+        <root level="DEBUG">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_JSON"/>
+        </root>
+        <logger name="com.cityapp" level="DEBUG"/>
+        <logger name="org.hibernate.SQL" level="DEBUG"/>
+        <logger name="org.springframework.security" level="DEBUG"/>
+    </springProfile>
+
     <!-- Default (when no profile specified) -->
     <springProfile name="default">
         <root level="INFO">
