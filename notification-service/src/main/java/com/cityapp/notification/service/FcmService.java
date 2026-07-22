@@ -49,9 +49,8 @@ public class FcmService {
     private final DeviceTokenRepository deviceTokenRepository;
     private final FirebaseMessaging     firebaseMessaging;
 
-    @Autowired(required = false)   // optional
     public FcmService(DeviceTokenRepository deviceTokenRepository,
-                      FirebaseMessaging firebaseMessaging) {
+                      @Autowired(required = false) FirebaseMessaging firebaseMessaging) {
         this.deviceTokenRepository = deviceTokenRepository;
         this.firebaseMessaging = firebaseMessaging;
         if (this.firebaseMessaging == null) {
