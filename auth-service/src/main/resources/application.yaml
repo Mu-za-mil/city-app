@@ -11,7 +11,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/cityapp}
     username: ${DB_USERNAME:cityapp}
-    password: ${DB_PASSWORD:cityapp}
+    password: ${DB_PASSWORD}
 
   data:
     redis:
@@ -33,6 +33,10 @@ spring:
     # Eventually (Phase 17): auth-service gets its own dedicated DB.
     # For now: shared DB is simpler and correct.
 
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
 # Eureka registration
 eureka:
   client:
@@ -56,3 +60,11 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+
+logging:
+  level:
+    com.cityapp: DEBUG
+    org.hibernate.SQL: OFF
+    org.springframework.security: DEBUG
+    org.springframework.cache: DEBUG
+    org.springframework.boot.context.properties: DEBUG
