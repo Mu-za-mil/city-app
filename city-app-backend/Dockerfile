@@ -8,6 +8,9 @@ COPY target/*.jar app.jar
 
 # Create non-root user (security best practice)
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
+
 USER appuser
 
 EXPOSE 8080
