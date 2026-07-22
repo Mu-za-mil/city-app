@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -86,10 +87,10 @@ public class RateLimitFilter implements Filter {
     public RateLimitFilter(
             @Autowired(required = false) ProxyManager<byte[]> proxyManager,
             ObjectMapper objectMapper,
-            Supplier<BucketConfiguration> loginBucketConfig,
-            Supplier<BucketConfiguration> registerBucketConfig,
-            Supplier<BucketConfiguration> otpBucketConfig,
-            Supplier<BucketConfiguration> generalApiBucketConfig) {
+            @Qualifier("loginBucketConfig") Supplier<BucketConfiguration> loginBucketConfig,
+            @Qualifier("registerBucketConfig") Supplier<BucketConfiguration> registerBucketConfig,
+            @Qualifier("otpBucketConfig") Supplier<BucketConfiguration> otpBucketConfig,
+            @Qualifier("generalApiBucketConfig") Supplier<BucketConfiguration> generalApiBucketConfig) {
         this.proxyManager = proxyManager;
         this.objectMapper = objectMapper;
         this.loginBucketConfig = loginBucketConfig;
