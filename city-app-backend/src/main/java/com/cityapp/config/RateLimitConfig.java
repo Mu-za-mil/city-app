@@ -3,12 +3,13 @@ package com.cityapp.config;
 import java.time.Duration;
 import java.util.function.Supplier;
 
+import io.lettuce.core.ClientOptions;
+import io.lettuce.core.SocketOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.connection.RedisConnection;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.BucketConfiguration;
@@ -17,29 +18,36 @@ import io.github.bucket4j.redis.lettuce.cas.LettuceBasedProxyManager;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.codec.ByteArrayCodec;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * Rate limiting configuration using Bucket4j with Redis backend.
  */
-@Slf4j
 @Configuration
 public class RateLimitConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(RateLimitConfig.class);
+
     @Bean
-    public ProxyManager<byte[]> bucketProxyManager() {
+    public ProxyManager<byte[]> bucketProxyManager(
+            @Value("${REDIS_HOST:localhost}") String redisHost,
+            @Value("${REDIS_PORT:6379}") int redisPort) {
 
-        System.out.println("CREATING LETTUCE CLIENT");
+        String redisUrl = "redis://" + redisHost + ":" + redisPort;
+        log.info("Creating Redis client for {}", redisUrl);
 
-        RedisClient redisClient =
-                RedisClient.create("redis://127.0.0.1:6379");
+        RedisClient redisClient = RedisClient.create(redisUrl);
 
-        System.out.println("CONNECTING");
+        log.info("Connecting to Redis at {}", redisUrl);
+        redisClient.setOptions(ClientOptions.builder()
+                .socketOptions(SocketOptions.builder()
+                        .connectTimeout(Duration.ofSeconds(5))
+                        .build())
+                .build());
 
         StatefulRedisConnection<byte[], byte[]> connection =
                 redisClient.connect(ByteArrayCodec.INSTANCE);
 
-        System.out.println("CONNECTED");
+        log.info("Redis connection established");
 
         return LettuceBasedProxyManager
                 .builderFor(connection)
