@@ -60,6 +60,28 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             @NonNull FilterChain         filterChain)
             throws ServletException, IOException {
 
+        // If request came through the API Gateway, trust the forwarded headers
+        if (request.getHeader("X-Gateway-Request") != null) {
+            String email = request.getHeader("X-User-Email");
+            if (email != null) {
+                try {
+                    var userDetails = userDetailsService.loadUserByUsername(email);
+                    var authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    log.debug("Authentication set from gateway for user: {}", email);
+                } catch (Exception e) {
+                    log.warn("Failed to load user from gateway header: {}", e.getMessage());
+                }
+            }
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         final String authHeader = request.getHeader("Authorization");
         // Authorization header format: "Bearer eyJhbGci..."
         // "Bearer " is 7 characters.
