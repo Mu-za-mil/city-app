@@ -47,3 +47,4 @@ logs/
 # Firebase credentials
 /notification-service/src/main/resources/firebase-credentials.json
 
+backup*
