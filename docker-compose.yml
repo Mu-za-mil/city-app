@@ -17,12 +17,14 @@ services:
   eureka-server:
     build:
       context: ./eureka-server
-      dockerfile: city-app-backend/Dockerfile
+      dockerfile: Dockerfile
     container_name: cityapp-eureka
     ports:
       - "8761:8761"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_PROFILES_ACTIVE=dev
+    profiles:
+      - core
     networks:
       - cityapp-network
     healthcheck:
@@ -35,15 +37,19 @@ services:
   api-gateway:
     build:
       context: ./api-gateway
-      dockerfile: city-app-backend/Dockerfile
+      dockerfile: Dockerfile
     container_name: cityapp-gateway
     ports:
-      - "8000:8000"
+      - "8085:8000"
     environment:
       - EUREKA_HOST=eureka-server
       - REDIS_HOST=cityapp-redis
       - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_PROFILES_ACTIVE=dev
+      - LOGGING_LEVEL_COM_CITYAPP_GATEWAY=DEBUG
+      - LOGGING_LEVEL_IO_JSONWEBTOKEN=DEBUG
+    profiles:
+      - core
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -54,17 +60,20 @@ services:
   auth-service:
     build:
       context: ./auth-service
-      dockerfile: city-app-backend/Dockerfile
+      dockerfile: Dockerfile
     container_name: cityapp-auth
     ports:
       - "8081:8081"
     environment:
       - EUREKA_HOST=eureka-server
-      - DB_URL=jdbc:postgresql://cityapp-postgres:5432/cityapp
-      - REDIS_HOST=cityapp-redis
-      - KAFKA_BROKERS=cityapp-kafka:9092
+      - DB_URL=jdbc:postgresql://postgres:5432/cityapp
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:9092
       - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_PASSWORD=${DB_PASSWORD}
+    profiles:
+      - core
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -75,18 +84,21 @@ services:
   notification-service:
     build:
       context: ./notification-service
-      dockerfile: city-app-backend/Dockerfile
+      dockerfile: Dockerfile
     container_name: cityapp-notification
     ports:
       - "8083:8083"
     environment:
       - EUREKA_HOST=eureka-server
-      - DB_URL=jdbc:postgresql://cityapp-postgres:5432/cityapp
-      - REDIS_HOST=cityapp-redis
-      - KAFKA_BROKERS=cityapp-kafka:9092
+      - DB_URL=jdbc:postgresql://postgres:5432/cityapp
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:9092
       - MAIL_HOST=cityapp-mailhog
-      - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:}
-      - SPRING_PROFILES_ACTIVE=docker
+      - FIREBASE_CREDENTIALS_PATH=${APP_FCM_CREDENTIALS_PATH:-}
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_PASSWORD=${DB_PASSWORD}
+    profiles:
+      - core
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -97,17 +109,25 @@ services:
   main-service:
     build:
       context: ./city-app-backend
-      dockerfile: city-app-backend/Dockerfile
+      dockerfile: Dockerfile
     container_name: cityapp-main
     ports:
       - "8080:8080"
     environment:
       - EUREKA_HOST=eureka-server
-      - DB_URL=jdbc:postgresql://cityapp-postgres:5432/cityapp
-      - REDIS_HOST=cityapp-redis
-      - KAFKA_BROKERS=cityapp-kafka:9092
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cityapp
+      - REDIS_HOST=redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_PROFILES_ACTIVE=dev
+      - DB_PASSWORD=${DB_PASSWORD:-cityapp_password}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+      - LOGGING_LEVEL_COM_CITYAPP=DEBUG
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY=DEBUG
+    profiles:
+      - core
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -128,6 +148,8 @@ services:
       POSTGRES_PASSWORD: cityapp_password
     ports:
       - "5433:5432"
+    profiles:
+      - infra
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Named volume: data persists between container restarts.
@@ -153,6 +175,8 @@ services:
     # With AOF: Redis recovers all data from the log on restart.
     ports:
       - "6379:6379"
+    profiles:
+      - infra
     volumes:
       - redis_data:/data
     healthcheck:
@@ -172,6 +196,8 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    profiles:
+      - infra
     networks:
       - cityapp-network
 
@@ -183,10 +209,13 @@ services:
       - zookeeper
     ports:
       - "9092:9092"
+    profiles:
+      - infra
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       # WHY auto create TRUE in dev: topics created automatically when first used.
@@ -207,12 +236,14 @@ services:
     container_name: cityapp-mailhog
     ports:
       - "1025:1025"   # SMTP — Spring Mail connects here
-      - "8025:8025"   # Web UI — view all sent emails
+      - "8027:8025"   # Web UI — view all sent emails
     # WHY MailHog:
     # In dev, we send real emails for order confirmations, OTPs.
     # Without MailHog: these emails go to real users' inboxes.
     # With MailHog: all emails are trapped and visible at localhost:8025.
     # Open browser → http://localhost:8025 → see every email the app sent.
+    profiles:
+      - tools
     networks:
       - cityapp-network
 
@@ -224,6 +255,8 @@ services:
       - kafka
     ports:
       - "8090:8080"
+    profiles:
+      - tools
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
@@ -240,6 +273,8 @@ services:
     container_name: cityapp-zipkin
     ports:
       - "9411:9411"
+    profiles:
+      - monitoring
     networks:
       - cityapp-network
 
@@ -249,9 +284,11 @@ services:
     container_name: cityapp-prometheus
     ports:
       - "9090:9090"
+    profiles:
+      - monitoring
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - ./city-app-backend/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./city-app-backend/monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus_data:/prometheus
     networks:
       - cityapp-network
@@ -262,6 +299,8 @@ services:
     container_name: cityapp-grafana
     ports:
       - "3000:3000"
+    profiles:
+      - monitoring
     environment:
       GF_SECURITY_ADMIN_USER:     admin
       GF_SECURITY_ADMIN_PASSWORD: admin123
@@ -276,8 +315,10 @@ services:
     container_name: cityapp-loki
     ports:
       - "3100:3100"
+    profiles:
+      - monitoring
     volumes:
-      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - ./city-app-backend/monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
       - loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
     networks:
@@ -287,9 +328,11 @@ services:
   promtail:
     image: grafana/promtail:2.9.0
     container_name: cityapp-promtail
+    profiles:
+      - monitoring
     volumes:
-      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
-      - ./logs:/var/log/app     # Mount application log directory
+      - ./city-app-backend/monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
+      - ./city-app-backend/logs:/var/log/app     # Mount application log directory
     command: -config.file=/etc/promtail/config.yml -log.level=debug
     depends_on:
       - loki
@@ -302,8 +345,10 @@ services:
     container_name: cityapp-alertmanager
     ports:
       - "9093:9093"
+    profiles:
+      - monitoring
     volumes:
-      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./city-app-backend/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
     command: >
       --config.file=/etc/alertmanager/alertmanager.yml
       --storage.path=/alertmanager
