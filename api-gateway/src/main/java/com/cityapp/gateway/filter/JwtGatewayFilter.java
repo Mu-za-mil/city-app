@@ -75,6 +75,7 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
+        log.info(">>> JwtGatewayFilter: path={}, authHeader={}", path, request.getHeaders().getFirst("Authorization"));
 
         // Skip JWT validation for open paths
         if (isOpenPath(path)) {
@@ -92,6 +93,8 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
         String token = authHeader.substring(7);
 
+        log.info(">>> JwtGatewayFilter: path={}, authHeader={}", path, authHeader);
+
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8)))
@@ -99,12 +102,23 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
                     .parseSignedClaims(token)
                     .getPayload();
 
-            // Add user context headers for downstream services
-            ServerHttpRequest mutatedRequest = request.mutate()
-                    .header("X-User-Id",    claims.get("userId", String.class))
-                    .header("X-User-Email", claims.getSubject())
-                    .header("X-User-Role",  claims.get("role", String.class))
-                    .build();
+            // Add user context headers for downstream services (be defensive: claims may be absent)
+            Object uidObj = claims.get("userId");
+            String userId = uidObj != null ? uidObj.toString() : "";
+            Object roleObj = claims.get("role");
+            String userRole = roleObj != null ? roleObj.toString() : "";
+
+            var requestBuilder = request.mutate();
+            // Always include email (subject)
+            requestBuilder.header("X-User-Email", claims.getSubject());
+            if (!userId.isEmpty()) {
+                requestBuilder.header("X-User-Id", userId);
+            }
+            if (!userRole.isEmpty()) {
+                requestBuilder.header("X-User-Role", userRole);
+            }
+
+            ServerHttpRequest mutatedRequest = requestBuilder.build();
 
             log.debug("JWT validated: user={} path={}",
                     claims.getSubject(), path);
