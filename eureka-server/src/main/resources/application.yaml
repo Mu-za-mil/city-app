@@ -5,6 +5,10 @@ spring:
   application:
     name: eureka-server
 
+  mvc:
+    servlet:
+      load-on-startup: 1
+
 eureka:
   instance:
     hostname: localhost
