@@ -45,6 +45,5 @@ Thumbs.db
 logs/
 
 # Firebase credentials
-/notification-service/src/main/resources/firebase-credentials.json
+src/main/resources/firebase-credentials.json
 
-backup*

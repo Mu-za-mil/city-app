@@ -1,0 +1,139 @@
+﻿server:
+  port: 8000
+
+spring:
+  application:
+    name: api-gateway
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration
+
+  cloud:
+    gateway:
+      # ── Route Definitions ─────────────────────────────────────────────────
+      server:
+        webflux:
+          routes:
+        # Auth Service: /auth/** → auth-service
+            - id: auth-service-route
+              uri: lb://auth-service
+              # lb://: Load Balanced via Eureka.
+              # "auth-service" = the spring.application.name registered in Eureka.
+              # Eureka returns all instances. Gateway round-robins across them.
+              predicates:
+                - Path=/api/v1/auth/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: auth-service-cb
+                    fallbackUri: forward:/fallback/auth
+                    # If auth-service is down: forward to /fallback/auth.
+                    # Returns 503 with a clear message.
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 50
+                    # 50 requests/second to the auth endpoint overall
+                    redis-rate-limiter.burstCapacity: 100
+                    key-resolver: "#{@ipKeyResolver}"
+
+          # Notification Controller API (read endpoints exposed via gateway)
+            - id: notification-service-route
+              uri: lb://notification-service
+              predicates:
+                - Path=/api/v1/notifications/**
+                - Path=/api/v1/device-tokens/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: notification-service-cb
+                    fallbackUri: forward:/fallback/notification
+
+          # Main Service: everything else → monolith
+            - id: main-service-route
+              uri: lb://main-service
+              predicates:
+                - Path=/**
+#              filters:
+#                - name: CircuitBreaker
+#                  args:
+#                    name: main-service-cb
+#                    fallbackUri: forward:/fallback/main
+
+          # ── Global Filters ────────────────────────────────────────────────────
+          default-filters:
+            - AddRequestHeader=X-Gateway-Request, true
+        # Tag all requests that came through the gateway.
+        # Services can verify: "did this come from the gateway?"
+            - name: Retry
+              args:
+                retries: 2
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+            # Retry on 502/503: transient connection issues.
+
+  # ── Redis for rate limiting ───────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# ── Eureka registration ───────────────────────────────────────────────────
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
+    registry-fetch-interval-seconds: 5
+    # Refresh service registry every 5 seconds.
+    # Default: 30 seconds. Faster discovery of new instances.
+  instance:
+    lease-renewal-interval-in-seconds: 5
+    # Heartbeat every 5 seconds (default: 30).
+    # Gateway de-registers quickly when it shuts down.
+
+# JWT config
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiry: 900000    # 15 minutes
+    refresh-token-expiry: 2592000000  # 30 days
+
+# ── Circuit Breaker configuration ─────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      auth-service-cb:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+      notification-service-cb:
+        slidingWindowSize: 10
+        failureRateThreshold: 60
+        waitDurationInOpenState: 30s
+      main-service-cb:
+        slidingWindowSize: 10
+        failureRateThreshold: 40
+        # Main service: more aggressive circuit breaking.
+        # It's the core commerce service. Fail fast.
+        waitDurationInOpenState: 15s
+  timelimiter:
+    instances:
+      auth-service-cb:
+        timeoutDuration: 5s
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    gateway:
+      # /actuator/gateway/routes: see all configured routes
+      access: read_only
+
+logging:
+  level:
+    com.cityapp: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.boot.context.properties: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+    io.github.resilience4j: DEBUG
