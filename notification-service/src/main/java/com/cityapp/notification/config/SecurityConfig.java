@@ -5,6 +5,9 @@ import com.cityapp.security.filter.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import com.cityapp.security.filter.JwtAuthFilter;
+import com.cityapp.security.service.JwtService;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -27,6 +30,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
+@Import({JwtAuthFilter.class, JwtService.class})
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
