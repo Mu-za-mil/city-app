@@ -1,7 +1,6 @@
 package com.cityapp.notification.config;
 
 import com.cityapp.notification.repository.UserRepository;
-import com.cityapp.security.filter.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
