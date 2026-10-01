@@ -4,16 +4,16 @@
 # ONE COMMAND TO START EVERYTHING:
 #   docker compose up -d
 #
-# WHY DOCKER COMPOSE:
-#   Developer A has PostgreSQL 14. Developer B has PostgreSQL 16.
-#   Query works on B's machine. Silently fails on A's.
-#   Docker Compose: everyone runs EXACTLY the same version.
-#   "Works on my machine" becomes "works on every machine".
+# PUBLIC APPLICATION ENTRY POINT:
+#   API Gateway -> internal application services
+#
+# The application services intentionally have no host "ports:" mappings.
+# They remain reachable through the Docker network, but are not published
+# directly on the developer machine/host.
 # ============================================================================
 
 services:
 
-  # ── Eureka Service Registry ───────────────────────────────────────────────
   eureka-server:
     build:
       context: ./eureka-server
@@ -33,7 +33,6 @@ services:
       timeout: 10s
       retries: 5
 
-  # ── API Gateway ────────────────────────────────────────────────────────────
   api-gateway:
     build:
       context: ./api-gateway
@@ -56,14 +55,11 @@ services:
     networks:
       - cityapp-network
 
-  # ── Auth Service ───────────────────────────────────────────────────────────
   auth-service:
     build:
       context: ./auth-service
       dockerfile: Dockerfile
     container_name: cityapp-auth
-    ports:
-      - "8081:8081"
     environment:
       - EUREKA_HOST=eureka-server
       - DB_URL=jdbc:postgresql://postgres:5432/cityapp
@@ -80,14 +76,11 @@ services:
     networks:
       - cityapp-network
 
-  # ── Notification Service ───────────────────────────────────────────────────
   notification-service:
     build:
       context: ./notification-service
       dockerfile: Dockerfile
     container_name: cityapp-notification
-    ports:
-      - "8083:8083"
     environment:
       - EUREKA_HOST=eureka-server
       - DB_URL=jdbc:postgresql://postgres:5432/cityapp
@@ -105,14 +98,11 @@ services:
     networks:
       - cityapp-network
 
-  # ── Main Service (Monolith — remaining modules) ───────────────────────────
   main-service:
     build:
       context: ./city-app-backend
       dockerfile: Dockerfile
     container_name: cityapp-main
-    ports:
-      - "8080:8080"
     environment:
       - EUREKA_HOST=eureka-server
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cityapp
@@ -134,13 +124,8 @@ services:
     networks:
       - cityapp-network
 
-  # ── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
     image: postgis/postgis:16-3.4
-    # WHY postgis not plain postgres:
-    # postgis/postgis includes the PostGIS spatial extension.
-    # Switching images after data exists = complex migration.
-    # Start with PostGIS from day one = zero migration cost later.
     container_name: cityapp-postgres
     environment:
       POSTGRES_DB:       cityapp
@@ -152,8 +137,6 @@ services:
       - infra
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Named volume: data persists between container restarts.
-      # Without this: every docker compose down destroys all data.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cityapp -d cityapp"]
       interval: 10s
@@ -162,17 +145,10 @@ services:
     networks:
       - cityapp-network
 
-  # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    # WHY alpine: 7MB image vs 50MB standard. Same functionality.
     container_name: cityapp-redis
     command: redis-server --appendonly yes
-    # WHY appendonly yes:
-    # Writes every operation to an append-only file (AOF) on disk.
-    # Without it: Redis restart = empty Redis = all carts lost,
-    # all JWT blacklists cleared, all OTPs gone.
-    # With AOF: Redis recovers all data from the log on restart.
     ports:
       - "6379:6379"
     profiles:
@@ -187,7 +163,6 @@ services:
     networks:
       - cityapp-network
 
-  # ── Zookeeper (Kafka Dependency) ───────────────────────────────────────────
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: cityapp-zookeeper
@@ -201,7 +176,6 @@ services:
     networks:
       - cityapp-network
 
-  # ── Kafka ──────────────────────────────────────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: cityapp-kafka
@@ -218,9 +192,6 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      # WHY auto create TRUE in dev: topics created automatically when first used.
-      # In production: create topics manually with correct partition count.
-      # 3 partitions = 3 parallel consumers. Plan for growth from the start.
     healthcheck:
       test: ["CMD", "kafka-topics", "--bootstrap-server",
              "localhost:9092", "--list"]
@@ -230,24 +201,17 @@ services:
     networks:
       - cityapp-network
 
-  # ── MailHog (Email Trap) ───────────────────────────────────────────────────
   mailhog:
     image: mailhog/mailhog:latest
     container_name: cityapp-mailhog
     ports:
-      - "1025:1025"   # SMTP — Spring Mail connects here
-      - "8027:8025"   # Web UI — view all sent emails
-    # WHY MailHog:
-    # In dev, we send real emails for order confirmations, OTPs.
-    # Without MailHog: these emails go to real users' inboxes.
-    # With MailHog: all emails are trapped and visible at localhost:8025.
-    # Open browser → http://localhost:8025 → see every email the app sent.
+      - "1025:1025"
+      - "8027:8025"
     profiles:
       - tools
     networks:
       - cityapp-network
 
-  # ── Kafka UI ───────────────────────────────────────────────────────────────
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: cityapp-kafka-ui
@@ -260,14 +224,9 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-    # WHY Kafka UI:
-    # Without it: must use kafka-console-consumer command to see messages.
-    # With it: browse topics, see message payloads, monitor consumer lag,
-    # replay messages from DLT — all in a browser UI.
     networks:
       - cityapp-network
 
-  # ── Zipkin (Distributed Tracing) ──────────────────────────────────────────
   zipkin:
     image: openzipkin/zipkin:latest
     container_name: cityapp-zipkin
@@ -278,7 +237,6 @@ services:
     networks:
       - cityapp-network
 
-  # ── Prometheus (Metrics Collection) ───────────────────────────────────────
   prometheus:
     image: prom/prometheus:latest
     container_name: cityapp-prometheus
@@ -293,7 +251,6 @@ services:
     networks:
       - cityapp-network
 
-  # ── Grafana (Metrics Dashboard) ────────────────────────────────────────────
   grafana:
     image: grafana/grafana:latest
     container_name: cityapp-grafana
@@ -302,14 +259,13 @@ services:
     profiles:
       - monitoring
     environment:
-      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin123
     volumes:
       - grafana_data:/var/lib/grafana
     networks:
       - cityapp-network
 
-  # ── Loki (Log Aggregation Backend) ───────────────────────────────────────
   loki:
     image: grafana/loki:2.9.0
     container_name: cityapp-loki
@@ -324,22 +280,20 @@ services:
     networks:
       - cityapp-network
 
-  # ── Promtail (Log Shipper) ────────────────────────────────────────────────
   promtail:
     image: grafana/promtail:2.9.0
     container_name: cityapp-promtail
     profiles:
       - monitoring
     volumes:
+      - ./city-app-backend/logs:/var/log/app
       - ./city-app-backend/monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
-      - ./city-app-backend/logs:/var/log/app     # Mount application log directory
     command: -config.file=/etc/promtail/config.yml -log.level=debug
     depends_on:
       - loki
     networks:
       - cityapp-network
 
-  # ── Alertmanager ──────────────────────────────────────────────────────────
   alertmanager:
     image: prom/alertmanager:latest
     container_name: cityapp-alertmanager
@@ -361,7 +315,6 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
-
 
 networks:
   cityapp-network:
