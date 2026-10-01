@@ -1,6 +1,7 @@
 package com.cityapp.config;
 
 import com.cityapp.security.filter.JwtAuthFilter;
+import com.cityapp.security.service.JwtService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -31,7 +32,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthFilter  jwtAuthFilter;
+    private final JwtAuthFilter jwtAuthFilter;
     private final com.cityapp.user.service.UserService userService;
     private final PasswordEncoder passwordEncoder;
 
