@@ -5,6 +5,7 @@ import com.cityapp.common.event.UserRegisteredEvent;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.auth.dto.*;
+import com.cityapp.security.service.JwtService;
 import com.cityapp.auth.entity.RefreshToken;
 import com.cityapp.common.enums.Role;
 import com.cityapp.auth.entity.User;
