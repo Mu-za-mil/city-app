@@ -21,37 +21,22 @@ import java.util.List;
 /**
  * Global JWT validation filter for the API Gateway.
  *
- * WHY VALIDATE JWT AT THE GATEWAY:
- *   Without gateway validation: every microservice validates the JWT itself.
- *   Each service: imports JWT library, reads the secret, validates.
- *   Duplicated code across all services.
- *   If JWT secret changes: update all services.
+ * SECURITY MODEL:
+ *   1. The gateway is the public entry point.
+ *   2. The gateway validates the caller's JWT.
+ *   3. Client-supplied identity headers are removed before forwarding.
+ *   4. The gateway adds identity headers derived only from the validated JWT.
+ *   5. The monolith still validates the forwarded JWT itself. It does NOT
+ *      authenticate a request merely because an X-Gateway-Request header exists.
  *
- *   With gateway validation:
- *   JWT validated ONCE at the gateway.
- *   Downstream services: trust the X-Authenticated-User header.
- *   No JWT library needed in auth-service, order-service, etc.
- *   Services focus on business logic. Gateway handles security.
- *
- * WHAT THE GATEWAY DOES:
- *   1. Extracts Bearer token from Authorization header.
- *   2. Validates signature (JWT_SECRET must match the one in auth-service).
- *   3. Checks expiry.
- *   4. Extracts userId, email, role from claims.
- *   5. Adds headers to the forwarded request:
- *      X-User-Id: 42
- *      X-User-Email: ravi@test.com
- *      X-User-Role: USER
- *   6. Downstream service reads these headers — no JWT parsing needed.
+ * WHY THE MONOLITH VALIDATES THE JWT TOO:
+ *   Identity headers are metadata, not proof of authentication. A downstream
+ *   service must never treat a client-controlled header as an authentication
+ *   credential. Keeping JWT validation in the monolith makes the service safe
+ *   even if it is accidentally reached through another internal path.
  *
  * OPEN ENDPOINTS:
  *   /auth/register, /auth/login, /auth/refresh: no JWT required.
- *   All others: JWT required.
- *
- * REACTIVE:
- *   Spring Cloud Gateway is built on WebFlux (reactive).
- *   Filters must be non-blocking: return Mono<Void> not void.
- *   This is different from the servlet-based RateLimitFilter in the monolith.
  */
 @Slf4j
 @Component
@@ -60,7 +45,6 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
     @Value("${app.jwt.secret}")
     private String jwtSecret;
 
-    // Paths that don't require authentication
     private static final List<String> OPEN_PATHS = List.of(
             "/api/v1/auth/login",
             "/api/v1/auth/register",
@@ -69,21 +53,36 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
             "/actuator"
     );
 
+    private static final List<String> TRUSTED_IDENTITY_HEADERS = List.of(
+            "X-User-Email",
+            "X-User-Id",
+            "X-User-Role",
+            "X-Gateway-Request"
+    );
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange,
                              GatewayFilterChain chain) {
 
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
-        log.info(">>> JwtGatewayFilter: path={}, authHeader={}", path, request.getHeaders().getFirst("Authorization"));
 
-        // Skip JWT validation for open paths
+        // Client-controlled identity headers are never allowed to pass through.
+        // They are re-created below only after a JWT has been validated.
+        ServerHttpRequest.Builder requestBuilder = request.mutate();
+        requestBuilder.headers(headers ->
+                TRUSTED_IDENTITY_HEADERS.forEach(headers::remove));
+
+        ServerHttpRequest sanitizedRequest = requestBuilder.build();
+
+        // Skip JWT validation for open paths.
         if (isOpenPath(path)) {
-            return chain.filter(exchange);
+            return chain.filter(exchange.mutate()
+                    .request(sanitizedRequest)
+                    .build());
         }
 
-        // Extract token
-        String authHeader = request.getHeaders()
+        String authHeader = sanitizedRequest.getHeaders()
                 .getFirst("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -93,36 +92,41 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
         String token = authHeader.substring(7);
 
-        log.info(">>> JwtGatewayFilter: path={}, authHeader={}", path, authHeader);
-
         try {
             Claims claims = Jwts.parser()
-                    .verifyWith(Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8)))
+                    .verifyWith(Keys.hmacShaKeyFor(
+                            jwtSecret.getBytes(StandardCharsets.UTF_8)))
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
 
-            // Add user context headers for downstream services (be defensive: claims may be absent)
             Object uidObj = claims.get("userId");
             String userId = uidObj != null ? uidObj.toString() : "";
+
             Object roleObj = claims.get("role");
             String userRole = roleObj != null ? roleObj.toString() : "";
 
-            var requestBuilder = request.mutate();
-            // Always include email (subject)
-            requestBuilder.header("X-User-Email", claims.getSubject());
-            if (!userId.isEmpty()) {
-                requestBuilder.header("X-User-Id", userId);
-            }
-            if (!userRole.isEmpty()) {
-                requestBuilder.header("X-User-Role", userRole);
-            }
+            requestBuilder.headers(headers -> {
+                // Explicitly replace any existing values with values derived
+                // from the validated JWT.
+                headers.set("X-User-Email", claims.getSubject());
+
+                if (!userId.isEmpty()) {
+                    headers.set("X-User-Id", userId);
+                }
+
+                if (!userRole.isEmpty()) {
+                    headers.set("X-User-Role", userRole);
+                }
+            });
 
             ServerHttpRequest mutatedRequest = requestBuilder.build();
 
-            log.debug("JWT validated: user={} path={}",
-                    claims.getSubject(), path);
+            log.debug("JWT validated for path={} user={}",
+                    path, claims.getSubject());
 
+            // IMPORTANT: Authorization is intentionally preserved so the
+            // downstream monolith can independently validate the JWT.
             return chain.filter(exchange.mutate()
                     .request(mutatedRequest)
                     .build());
@@ -157,6 +161,6 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -1; // Run before other filters (highest priority)
+        return -1;
     }
 }
