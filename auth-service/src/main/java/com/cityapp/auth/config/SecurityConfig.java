@@ -1,6 +1,5 @@
 package com.cityapp.auth.config;
 
-import com.cityapp.security.filter.JwtAuthFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
