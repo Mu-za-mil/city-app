@@ -65,6 +65,6 @@ InAppNotificationService {
 
     @Transactional
     public int markAllAsRead(Long userId) {
-        return notificationRepository.markAllAsRead(userId);
+        return notificationRepository.markAllAsRead(userId, Instant.now());
     }
 }
