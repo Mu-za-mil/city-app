@@ -52,6 +52,8 @@ services:
     depends_on:
       eureka-server:
         condition: service_healthy
+      notification-service:
+        condition: service_healthy
     networks:
       - cityapp-network
 
@@ -100,6 +102,12 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - LOGGING_LEVEL_COM_CITYAPP_SECURITY_FILTER_JWTAUTHFILTER=DEBUG
 
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8083/actuator/health | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     profiles:
       - core
     depends_on:
