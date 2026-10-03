@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: main-service-test
+  datasource:
+    url: jdbc:h2:mem:main_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    database-platform: org.hibernate.dialect.H2Dialect
+    open-in-view: false
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 200ms
+  kafka:
+    bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: false
+  mail:
+    host: localhost
+    port: 1025
+  cache:
+    type: simple
+  cloud:
+    discovery:
+      enabled: false
+
+eureka:
+  client:
+    enabled: false
+
+cityapp:
+  jwt:
+    secret: test-only-jwt-secret-012345678901234567890123456789
+  razorpay:
+    key-id: test_key_id
+    key-secret: test_key_secret
+    webhook-secret: test_webhook_secret
+  websocket:
+    redis-relay-enabled: false
+  ratelimit:
+    enabled: false
+
+app:
+  cache:
+    warmup:
+      enabled: false
+
+management:
+  tracing:
+    enabled: false

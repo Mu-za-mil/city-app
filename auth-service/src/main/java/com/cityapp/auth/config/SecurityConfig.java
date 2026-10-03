@@ -1,10 +1,12 @@
 package com.cityapp.auth.config;
 
-import com.cityapp.auth.filter.JwtAuthFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import com.cityapp.security.filter.JwtAuthFilter;
+import com.cityapp.security.service.JwtService;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -29,6 +31,7 @@ import java.util.List;
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
+@Import({JwtAuthFilter.class, JwtService.class})
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;

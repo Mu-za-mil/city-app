@@ -85,7 +85,7 @@ public class RefreshTokenService {
             log.warn("⚠️ SECURITY: Revoked refresh token reuse for userId={}. " +
                     "Revoking ALL sessions.", existing.getUser().getId());
             refreshTokenRepository.revokeAllForUser(
-                    existing.getUser().getId(), "SECURITY_REUSE_DETECTED");
+                    existing.getUser().getId(), "SECURITY_REUSE_DETECTED",Instant.now());
             throw AppException.badRequest(
                     "Refresh token already used. Please log in again.");
         }
@@ -124,7 +124,7 @@ public class RefreshTokenService {
 
     @Transactional
     public int revokeAllForUser(Long userId) {
-        return refreshTokenRepository.revokeAllForUser(userId, "LOGOUT_ALL");
+        return refreshTokenRepository.revokeAllForUser(userId, "LOGOUT_ALL",Instant.now());
     }
 
     // ── Sessions ───────────────────────────────────────────────────────────────
