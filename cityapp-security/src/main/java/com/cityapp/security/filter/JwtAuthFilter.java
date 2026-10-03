@@ -52,40 +52,64 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        String token = authHeader.substring(7);
+        String token = authHeader.substring(7).trim();
+
+        if (token.isEmpty()) {
+            log.debug("JWT authentication skipped: empty Bearer token");
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         try {
             String username = jwtService.extractUsername(token);
 
-            if (username != null &&
-                    SecurityContextHolder.getContext().getAuthentication() == null) {
-
-                UserDetails userDetails =
-                        userDetailsService.loadUserByUsername(username);
-
-                if (jwtService.isValid(token, userDetails)) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    userDetails,
-                                    null,
-                                    userDetails.getAuthorities());
-
-                    authentication.setDetails(
-                            new WebAuthenticationDetailsSource()
-                                    .buildDetails(request));
-
-                    SecurityContextHolder.getContext()
-                            .setAuthentication(authentication);
-
-                    log.debug("JWT authentication established for user={}",
-                            username);
-                }
+            if (username == null || username.isBlank()) {
+                log.debug("JWT authentication failed: token has no subject");
+                filterChain.doFilter(request, response);
+                return;
             }
+
+            if (SecurityContextHolder.getContext().getAuthentication() != null) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            log.debug("JWT subject extracted: {}", username);
+
+            UserDetails userDetails;
+            try {
+                userDetails = userDetailsService.loadUserByUsername(username);
+            } catch (org.springframework.security.core.userdetails.UsernameNotFoundException e) {
+                log.debug("JWT authentication failed: user not found for subject={}", username);
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            if (!jwtService.isValid(token, userDetails)) {
+                log.debug("JWT authentication failed: token rejected for subject={}", username);
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities());
+
+            authentication.setDetails(
+                    new WebAuthenticationDetailsSource().buildDetails(request));
+
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            log.debug("JWT authentication established for user={}", username);
+
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            log.debug("JWT authentication failed: token expired");
+        } catch (io.jsonwebtoken.JwtException e) {
+            log.debug("JWT authentication failed: invalid JWT ({})", e.getMessage());
         } catch (Exception e) {
-            // Invalid JWTs are treated as unauthenticated.
-            // Spring Security's authorization rules decide whether the
-            // endpoint is public or returns 401.
-            log.debug("JWT authentication failed: {}", e.getMessage());
+            log.warn("JWT authentication failed unexpectedly: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);
