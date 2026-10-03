@@ -44,6 +44,9 @@ eureka:
     lease-renewal-interval-in-seconds: 5
 
 app:
+  jwt:
+    secret: ${JWT_SECRET}
+
   fcm:
     credentials-path: ${APP_FCM_CREDENTIALS_PATH:-}
 
