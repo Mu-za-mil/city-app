@@ -1,6 +1,7 @@
 package com.cityapp.auth.service;
 
 import com.cityapp.auth.entity.RefreshToken;
+import com.cityapp.security.service.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
 import com.cityapp.common.constants.AppConstants;
 import com.cityapp.common.exception.AppException;

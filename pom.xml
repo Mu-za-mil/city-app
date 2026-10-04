@@ -11,14 +11,14 @@
 
     <modules>
         <module>cityapp-common</module>
+        <module>cityapp-security</module>
         <module>eureka-server</module>
         <module>api-gateway</module>
         <module>auth-service</module>
         <module>notification-service</module>
-        <module>city-app-backend</module>   <!-- main-service -->
+        <module>city-app-backend</module>
     </modules>
 
-    <!-- Spring Boot & Cloud BOMs -->
     <properties>
         <java.version>21</java.version>
         <spring-boot.version>3.5.14</spring-boot.version>
@@ -64,6 +64,7 @@
                     <configuration>
                         <source>${java.version}</source>
                         <target>${java.version}</target>
+                        <parameters>true</parameters>
                     </configuration>
                 </plugin>
             </plugins>

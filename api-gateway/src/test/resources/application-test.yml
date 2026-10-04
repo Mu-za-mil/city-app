@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: api-gateway-test
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cloud:
+    discovery:
+      enabled: false
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+eureka:
+  client:
+    enabled: false
+
+app:
+  jwt:
+    secret: test-only-jwt-secret-012345678901234567890123456789
+    access-token-expiry: 900000
+    refresh-token-expiry: 2592000000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
