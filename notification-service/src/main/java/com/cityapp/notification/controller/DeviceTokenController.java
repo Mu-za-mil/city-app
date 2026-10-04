@@ -1,9 +1,10 @@
 package com.cityapp.notification.controller;
 
+import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.notification.entity.DeviceToken;
-import com.cityapp.notification.repository.DeviceTokenRepository;
 import com.cityapp.notification.entity.User;
+import com.cityapp.notification.repository.DeviceTokenRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -15,20 +16,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * Manages FCM device token registration.
- *
- * WHEN TO REGISTER A TOKEN:
- *   Client-side: on every app launch (token may have rotated).
- *   The token should be sent immediately after login.
- *   If the app detects a new FCM token (Firebase calls onTokenRefresh):
- *   send the new token to this endpoint immediately.
- *
- * UPSERT SEMANTICS:
- *   If token already exists for this user: update platform (idempotent).
- *   If token is new: create a new record.
- *   UNIQUE constraint on token column enforces this at DB level.
- */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/device-tokens")
@@ -42,12 +29,16 @@ public class DeviceTokenController {
             @AuthenticationPrincipal User user,
             @Valid @RequestBody RegisterTokenRequest req) {
 
-        // Upsert: find existing or create new
         deviceTokenRepository.findByToken(req.getToken())
                 .ifPresentOrElse(
                         existing -> {
-                            // Token exists: ensure it's active and associated with this user
+                            if (!existing.getUserId().equals(user.getId())) {
+                                throw AppException.forbidden(
+                                        "Device token belongs to another user");
+                            }
+
                             existing.setActive(true);
+                            existing.setPlatform(req.getPlatform());
                             deviceTokenRepository.save(existing);
                         },
                         () -> {
@@ -58,6 +49,7 @@ public class DeviceTokenController {
                                     .active(true)
                                     .build();
                             deviceTokenRepository.save(token);
+
                             log.info("Device token registered: userId={} platform={}",
                                     user.getId(), req.getPlatform());
                         }
@@ -68,12 +60,20 @@ public class DeviceTokenController {
 
     @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> unregisterToken(
-            @RequestParam String token) {
+            @AuthenticationPrincipal User user,
+            @RequestParam(name = "token") String token) {
+
+        DeviceToken existing = deviceTokenRepository.findByToken(token)
+                .orElseThrow(() -> AppException.notFound("Device token not found"));
+
+        if (!existing.getUserId().equals(user.getId())) {
+            throw AppException.forbidden("Cannot remove another user's device token");
+        }
+
         deviceTokenRepository.deactivateToken(token);
+
         return ResponseEntity.ok(ApiResponse.ok("Device token removed"));
     }
-
-    // ── Request DTO ───────────────────────────────────────────────────────────
 
     @Getter
     @Setter
