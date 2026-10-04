@@ -118,3 +118,5 @@ logging:
     org.springframework.cloud.gateway: DEBUG
     io.github.resilience4j: DEBUG
     org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator: INFO
+    org.springframework.cloud.gateway.filter.headers.observation.ObservedResponseHttpHeadersFilter: INFO
+    org.springframework.cloud.gateway.filter.headers.observation.ObservedRequestHttpHeadersFilter: INFO
