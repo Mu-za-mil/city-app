@@ -92,6 +92,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     select o
     from Order o
     where o.id = :id
+      and o.user.id = :userId
 """)
-    Optional<Order> findByIdForUpdate(Long id);
+    Optional<Order> findByIdAndUserIdForUpdate(
+            @Param("id") Long id,
+            @Param("userId") Long userId);
 }

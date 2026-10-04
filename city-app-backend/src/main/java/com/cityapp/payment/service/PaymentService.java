@@ -58,9 +58,12 @@ public class PaymentService {
     )
     @Retry(name = "razorpay")
     @Transactional
-    public PaymentResponse initiatePayment(InitiatePaymentRequest req) {
+    public PaymentResponse initiatePayment(
+            InitiatePaymentRequest req,
+            Long userId) {
 
-        Order order = orderRepository.findByIdForUpdate(req.getOrderId())
+        Order order = orderRepository.findByIdAndUserIdForUpdate(
+                        req.getOrderId(), userId)
                 .orElseThrow(() ->
                         AppException.notFound(
                                 "Order not found: " + req.getOrderId()));
