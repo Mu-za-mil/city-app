@@ -3,6 +3,7 @@ package com.cityapp.delivery.service;
 import com.cityapp.common.event.EventPublisher;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.config.RedisWebSocketRelay;
+import com.cityapp.delivery.dto.DeliveryAssignmentResponse;
 import com.cityapp.delivery.entity.DeliveryAssignment;
 import com.cityapp.delivery.entity.DeliveryPartner;
 import com.cityapp.delivery.repository.DeliveryAssignmentRepository;
@@ -32,6 +33,9 @@ class DeliveryServiceTest {
 
     @Mock
     private DeliveryAssignmentRepository assignmentRepository;
+
+    @Mock
+    private DeliveryAssignmentResponse deliveryAssignmentResponse;
 
     @Mock
     private com.cityapp.order.repository.OrderRepository orderRepository;
