@@ -74,9 +74,10 @@ public class DeliveryController {
     @PostMapping("/{orderId}/assign")
     @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SELLER')")
     public ResponseEntity<ApiResponse<DeliveryAssignmentResponse>> assign(
+            @AuthenticationPrincipal User user,
             @PathVariable Long orderId) {
         return ResponseEntity.ok(ApiResponse.ok(
-                deliveryService.assignPartner(orderId)));
+                deliveryService.assignPartner(orderId, user)));
     }
 
     // ── Partner: mark delivered ───────────────────────────────────────────────
