@@ -383,22 +383,28 @@ public class CartService {
             }
         }
 
-        // 5. Build the PlaceOrderRequest from cart items
+        // 5. Build the PlaceOrderRequest from cart items.
+        // Product/quantity are request data; prices remain server-only.
         List<OrderItemRequest> orderItems = cart.getItems().stream()
                 .map(item -> OrderItemRequest.builder()
                         .productId(item.getProductId())
                         .quantity(item.getQuantity())
-                        .unitPrice(item.getUnitPrice())  // ← use SNAPSHOT price
                         .build())
                 .toList();
+
+        Map<Long, java.math.BigDecimal> trustedUnitPrices = cart.getItems().stream()
+                .collect(Collectors.toMap(
+                        CartItem::getProductId,
+                        CartItem::getUnitPrice));
 
         PlaceOrderRequest orderReq = PlaceOrderRequest.builder()
                 .storeId(storeId)
                 .orderType(req.getOrderType())
                 .deliveryAddress(req.getDeliveryAddress())
                 .notes(req.getNotes())
-                .idempotencyKey(req.getIdempotencyKey())  // ← forward idempotency key
+                .idempotencyKey(req.getIdempotencyKey())
                 .items(orderItems)
+                .trustedUnitPrices(trustedUnitPrices)
                 .build();
 
         // 6. Place the order (delegated to OrderService)
