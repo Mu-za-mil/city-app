@@ -14,6 +14,7 @@ import com.cityapp.order.entity.Order;
 import com.cityapp.order.entity.OrderStatus;
 import com.cityapp.order.repository.OrderRepository;
 import com.cityapp.user.entity.User;
+import com.cityapp.user.entity.Role;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -300,21 +301,20 @@ public class DeliveryService {
      * Get current location of a delivery (from Redis — instant).
      * Buyers poll this as a fallback if WebSocket is not supported.
      */
-    public LocationDto getCurrentLocation(Long orderId) {
+    public LocationDto getCurrentLocation(Long orderId, User user) {
+        DeliveryAssignment assignment = authorizeLocationAccess(orderId, user);
+
         String key = AppConstants.REDIS_DELIVERY_LOCATION + orderId;
         String cached = redisTemplate.opsForValue().get(key);
 
         if (cached == null) {
             // Not in Redis: check DB (partner may have been offline for > 1 hour)
-            return assignmentRepository.findByOrderId(orderId)
-                    .map(a -> LocationDto.builder()
-                            .latitude(a.getPartner().getCurrentLatitude())
-                            .longitude(a.getPartner().getCurrentLongitude())
-                            .partnerId(a.getPartner().getId())
-                            .partnerName(a.getPartner().getUser().getName())
-                            .build())
-                    .orElseThrow(() -> AppException.notFound(
-                            "No location data for order: " + orderId));
+            return LocationDto.builder()
+                    .latitude(assignment.getPartner().getCurrentLatitude())
+                    .longitude(assignment.getPartner().getCurrentLongitude())
+                    .partnerId(assignment.getPartner().getId())
+                    .partnerName(assignment.getPartner().getUser().getName())
+                    .build();
         }
 
         String[] parts = cached.split(",");
@@ -322,6 +322,19 @@ public class DeliveryService {
                 .latitude(Double.parseDouble(parts[0]))
                 .longitude(Double.parseDouble(parts[1]))
                 .build();
+    }
+
+
+    private DeliveryAssignment authorizeLocationAccess(Long orderId, User user) {
+        if (user.getRole() == Role.SUPER_ADMIN) {
+            return assignmentRepository.findByOrderId(orderId)
+                    .orElseThrow(() -> AppException.notFound(
+                            "No location data for order: " + orderId));
+        }
+
+        return assignmentRepository.findAuthorizedByOrderId(orderId, user.getId())
+                .orElseThrow(() -> AppException.notFound(
+                        "No location data for order: " + orderId));
     }
 
 
