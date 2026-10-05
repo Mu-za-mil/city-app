@@ -62,6 +62,87 @@ class DeliveryServiceTest {
 
     }
 
+
+    @Test
+    void assignPartner_shouldRejectSellerWhoDoesNotOwnOrder() {
+        User seller = user(99L, Role.SELLER);
+
+        when(orderRepository.findByIdAndStoreOwnerId(100L, 99L))
+                .thenReturn(Optional.empty());
+
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> deliveryService.assignPartner(100L, seller));
+
+        assertEquals(404, exception.getStatus().value());
+        verify(orderRepository).findByIdAndStoreOwnerId(100L, 99L);
+        verify(orderRepository, never()).findById(100L);
+        verify(assignmentRepository, never()).findByOrderId(anyLong());
+        verify(partnerRepository, never()).findAvailableNearStore(anyDouble(), anyDouble(), anyDouble(), anyInt());
+    }
+
+    @Test
+    void assignPartner_shouldAllowSellerWhoOwnsOrder() {
+        User seller = user(3L, Role.SELLER);
+        Order order = order(100L, user(1L, Role.USER), seller);
+        order.setStatus(com.cityapp.order.entity.OrderStatus.CONFIRMED);
+        order.getStore().setCoordinates(13.0400, 80.2300);
+
+        DeliveryPartner partner = DeliveryPartner.builder()
+                .id(20L)
+                .user(user(2L, Role.DELIVERY_PARTNER))
+                .build();
+
+        when(orderRepository.findByIdAndStoreOwnerId(100L, 3L))
+                .thenReturn(Optional.of(order));
+        when(assignmentRepository.findByOrderId(100L))
+                .thenReturn(Optional.empty());
+        when(partnerRepository.findAvailableNearStore(13.0400, 80.2300, 10000.0, 5))
+                .thenReturn(java.util.List.of(partner));
+        when(assignmentRepository.save(any(DeliveryAssignment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        DeliveryAssignmentResponse response =
+                deliveryService.assignPartner(100L, seller);
+
+        assertEquals(100L, response.getOrderId());
+        assertEquals(20L, response.getPartnerId());
+        assertEquals(com.cityapp.order.entity.OrderStatus.OUT_FOR_DELIVERY, order.getStatus());
+        verify(orderRepository).findByIdAndStoreOwnerId(100L, 3L);
+        verify(orderRepository, never()).findById(100L);
+        verify(assignmentRepository).save(any(DeliveryAssignment.class));
+        verify(orderRepository).save(order);
+        verify(eventPublisher).publishDeliveryAssigned(any());
+    }
+
+    @Test
+    void assignPartner_shouldAllowSuperAdminWithoutStoreOwnershipScope() {
+        User admin = user(4L, Role.SUPER_ADMIN);
+        Order order = order(100L, user(1L, Role.USER), user(3L, Role.SELLER));
+        order.setStatus(com.cityapp.order.entity.OrderStatus.CONFIRMED);
+        order.getStore().setCoordinates(13.0400, 80.2300);
+
+        DeliveryPartner partner = DeliveryPartner.builder()
+                .id(20L)
+                .user(user(2L, Role.DELIVERY_PARTNER))
+                .build();
+
+        when(orderRepository.findById(100L)).thenReturn(Optional.of(order));
+        when(assignmentRepository.findByOrderId(100L)).thenReturn(Optional.empty());
+        when(partnerRepository.findAvailableNearStore(13.0400, 80.2300, 10000.0, 5))
+                .thenReturn(java.util.List.of(partner));
+        when(assignmentRepository.save(any(DeliveryAssignment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        DeliveryAssignmentResponse response =
+                deliveryService.assignPartner(100L, admin);
+
+        assertEquals(100L, response.getOrderId());
+        assertEquals(20L, response.getPartnerId());
+        verify(orderRepository).findById(100L);
+        verify(orderRepository, never()).findByIdAndStoreOwnerId(anyLong(), anyLong());
+    }
+
     @Test
     void getCurrentLocation_shouldRejectUserWhoHasNoRelationshipToOrder() {
         User unrelatedUser = user(99L, Role.USER);
@@ -155,6 +236,20 @@ class DeliveryServiceTest {
                 .email("user" + id + "@example.com")
                 .passwordHash("hash")
                 .role(role)
+                .build();
+    }
+
+    private static Order order(Long orderId, User buyer, User seller) {
+        Store store = Store.builder()
+                .id(10L)
+                .owner(seller)
+                .name("Test Store")
+                .build();
+
+        return Order.builder()
+                .id(orderId)
+                .user(buyer)
+                .store(store)
                 .build();
     }
 
