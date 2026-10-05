@@ -122,11 +122,45 @@ public class OrderService {
             throw AppException.badRequest("Order must contain at least one item");
         }
 
-        // ── Step 4: Minimum Order Amount ───────────────────────────────────────
+        // ── Step 4: Resolve authoritative prices ───────────────────────────────
+        //
+        // Price is NEVER accepted from the client.
+        // For cart checkout, CartService may provide a server-only snapshot.
+        // Otherwise, the current Product.price is authoritative.
+        List<PricedOrderItem> pricedItems = new ArrayList<>();
 
-        BigDecimal total = req.getItems().stream()
-                .map(item -> item.getUnitPrice()
-                        .multiply(BigDecimal.valueOf(item.getQuantity())))
+        for (OrderItemRequest itemReq : req.getItems()) {
+            if (itemReq.getProductId() == null || itemReq.getQuantity() == null
+                    || itemReq.getQuantity() <= 0) {
+                throw AppException.badRequest(
+                        "Each order item must contain a valid productId and positive quantity");
+            }
+
+            Product product = productRepository
+                    .findByIdAndStoreIdAndActiveTrue(
+                            itemReq.getProductId(), req.getStoreId())
+                    .orElseThrow(() -> AppException.badRequest(
+                            "Product " + itemReq.getProductId() +
+                                    " not found in store " + req.getStoreId()));
+
+            BigDecimal unitPrice = req.getTrustedUnitPrices()
+                    .getOrDefault(product.getId(), product.getPrice());
+
+            BigDecimal subtotal = unitPrice
+                    .multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+
+            pricedItems.add(new PricedOrderItem(
+                    itemReq.getProductId(),
+                    itemReq.getQuantity(),
+                    unitPrice,
+                    subtotal,
+                    product));
+        }
+
+        // ── Step 5: Minimum Order Amount ───────────────────────────────────────
+
+        BigDecimal total = pricedItems.stream()
+                .map(PricedOrderItem::subtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         if (total.compareTo(MINIMUM_ORDER_AMOUNT) < 0) {
@@ -147,7 +181,7 @@ public class OrderService {
                             ". Your order total is ₹" + total);
         }
 
-        // ── Step 5: Delivery Address Validation ───────────────────────────────
+        // ── Step 6: Delivery Address Validation ───────────────────────────────
 
         if (req.getOrderType() == OrderType.DELIVERY &&
                 (req.getDeliveryAddress() == null ||
@@ -156,7 +190,7 @@ public class OrderService {
                     "Delivery address is required for DELIVERY orders");
         }
 
-        // ── Step 6: Create Order Record ────────────────────────────────────────
+        // ── Step 7: Create Order Record ────────────────────────────────────────
 
         String idempotencyKey = req.getIdempotencyKey() != null
                 ? req.getIdempotencyKey()
@@ -187,27 +221,16 @@ public class OrderService {
                 savedOrder.getId(), buyer.getEmail(),
                 store.getName(), total);
 
-        // ── Step 7: Create OrderItem Records (with Snapshots) ─────────────────
+        // ── Step 8: Create OrderItem Records (with server-derived prices) ─────
 
-        for (OrderItemRequest itemReq : req.getItems()) {
-
-            Product product = productRepository
-                    .findByIdAndStoreIdAndActiveTrue(
-                            itemReq.getProductId(), req.getStoreId())
-                    .orElseThrow(() -> AppException.badRequest(
-                            "Product " + itemReq.getProductId() +
-                                    " not found in store " + req.getStoreId()));
-
-            BigDecimal subtotal = itemReq.getUnitPrice()
-                    .multiply(BigDecimal.valueOf(itemReq.getQuantity()));
-
+        for (PricedOrderItem pricedItem : pricedItems) {
             OrderItem orderItem = OrderItem.builder()
                     .order(savedOrder)
-                    .product(product)
-                    .productName(product.getName())     // SNAPSHOT: name at order time
-                    .unitPrice(itemReq.getUnitPrice())  // SNAPSHOT: price from cart
-                    .quantity(itemReq.getQuantity())
-                    .subtotal(subtotal)                 // SNAPSHOT: subtotal at order time
+                    .product(pricedItem.product())
+                    .productName(pricedItem.product().getName())
+                    .unitPrice(pricedItem.unitPrice())
+                    .quantity(pricedItem.quantity())
+                    .subtotal(pricedItem.subtotal())
                     .build();
 
             savedOrder.getItems().add(orderItem);
@@ -216,7 +239,7 @@ public class OrderService {
         // Cascade saves OrderItems via Order
         orderRepository.save(savedOrder);
 
-        // ── Step 8: Publish Saga Command (replaces synchronous deduction) ──────────
+        // ── Step 9: Publish Saga Command (replaces synchronous deduction) ──────────
 
         /*
          * SAGA DESIGN DECISION: Publish command AFTER order is saved.
@@ -242,11 +265,11 @@ public class OrderService {
          *   Acceptable for now. Phase 17 Outbox fixes this completely.
          */
 
-        List<PlaceOrderCommand.OrderItemSpec> itemSpecs = req.getItems().stream()
+        List<PlaceOrderCommand.OrderItemSpec> itemSpecs = pricedItems.stream()
                 .map(item -> PlaceOrderCommand.OrderItemSpec.builder()
-                        .productId(item.getProductId())
-                        .quantity(item.getQuantity())
-                        .unitPrice(item.getUnitPrice())
+                        .productId(item.productId())
+                        .quantity(item.quantity())
+                        .unitPrice(item.unitPrice())
                         .build())
                 .toList();
 
@@ -440,5 +463,12 @@ public class OrderService {
 
         return response;
     }
+    private record PricedOrderItem(
+            Long productId,
+            Integer quantity,
+            BigDecimal unitPrice,
+            BigDecimal subtotal,
+            Product product) {}
+
     private record DeductionRecord(Inventory inventory, int quantity) {}
 }
