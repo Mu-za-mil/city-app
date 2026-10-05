@@ -122,9 +122,16 @@ public class DeliveryService {
      *   For Phase 11: direct assignment. "Accept/reject" flow in Phase 15+.
      */
     @Transactional
-    public DeliveryAssignmentResponse assignPartner(Long orderId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> AppException.notFound("Order not found"));
+    public DeliveryAssignmentResponse assignPartner(Long orderId, User user) {
+        Order order;
+
+        if (user.getRole() == Role.SELLER) {
+            order = orderRepository.findByIdAndStoreOwnerId(orderId, user.getId())
+                    .orElseThrow(() -> AppException.notFound("Order not found"));
+        } else {
+            order = orderRepository.findById(orderId)
+                    .orElseThrow(() -> AppException.notFound("Order not found"));
+        }
 
         if (order.getStatus() != OrderStatus.CONFIRMED
                 && order.getStatus() != OrderStatus.READY) {
