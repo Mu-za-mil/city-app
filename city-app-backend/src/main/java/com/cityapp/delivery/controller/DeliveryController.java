@@ -63,9 +63,10 @@ public class DeliveryController {
 
     @GetMapping("/{orderId}/location")
     public ResponseEntity<ApiResponse<LocationDto>> getLocation(
+            @AuthenticationPrincipal User user,
             @PathVariable Long orderId) {
         return ResponseEntity.ok(ApiResponse.ok(
-                deliveryService.getCurrentLocation(orderId)));
+                deliveryService.getCurrentLocation(orderId, user)));
     }
 
     // ── Admin: assign delivery partner ────────────────────────────────────────

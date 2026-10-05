@@ -14,6 +14,25 @@ public interface DeliveryAssignmentRepository
     Optional<DeliveryAssignment> findByOrderId(Long orderId);
     Optional<DeliveryAssignment> findByOrderIdAndPartnerId(Long orderId, Long partnerId);
 
+    @Query("""
+        SELECT da FROM DeliveryAssignment da
+        JOIN FETCH da.order o
+        JOIN FETCH o.user buyer
+        JOIN FETCH o.store store
+        JOIN FETCH store.owner seller
+        JOIN FETCH da.partner partner
+        JOIN FETCH partner.user partnerUser
+        WHERE o.id = :orderId
+          AND (
+              buyer.id = :userId
+              OR partnerUser.id = :userId
+              OR seller.id = :userId
+          )
+        """)
+    Optional<DeliveryAssignment> findAuthorizedByOrderId(
+            @Param("orderId") Long orderId,
+            @Param("userId") Long userId);
+
     // Partner's active deliveries (for partner dashboard)
     List<DeliveryAssignment> findByPartnerIdAndStatusOrderByAssignedAtDesc(
             Long partnerId,
