@@ -27,9 +27,6 @@ public interface DeliveryAssignmentRepository
               buyer.id = :userId
               OR partnerUser.id = :userId
               OR seller.id = :userId
-              OR :userId IN (
-                  SELECT admin.id FROM User admin WHERE admin.id = :userId AND admin.role = com.cityapp.user.entity.Role.SUPER_ADMIN
-              )
           )
         """)
     Optional<DeliveryAssignment> findAuthorizedByOrderId(
