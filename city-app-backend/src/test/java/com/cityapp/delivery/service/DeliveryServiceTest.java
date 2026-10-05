@@ -60,7 +60,6 @@ class DeliveryServiceTest {
                 webSocketRelay,
                 redisTemplate);
 
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 
     @Test
@@ -85,7 +84,7 @@ class DeliveryServiceTest {
 
         when(assignmentRepository.findAuthorizedByOrderId(100L, 1L))
                 .thenReturn(Optional.of(assignment));
-        when(valueOperations.get(anyString())).thenReturn("13.0400,80.2300");
+        stubRedisLocation("13.0400,80.2300");
 
         var location = deliveryService.getCurrentLocation(100L, buyer);
 
@@ -101,7 +100,7 @@ class DeliveryServiceTest {
 
         when(assignmentRepository.findAuthorizedByOrderId(100L, 2L))
                 .thenReturn(Optional.of(assignment));
-        when(valueOperations.get(anyString())).thenReturn("13.0400,80.2300");
+        stubRedisLocation("13.0400,80.2300");
 
         var location = deliveryService.getCurrentLocation(100L, partnerUser);
 
@@ -118,7 +117,7 @@ class DeliveryServiceTest {
 
         when(assignmentRepository.findAuthorizedByOrderId(100L, 3L))
                 .thenReturn(Optional.of(assignment));
-        when(valueOperations.get(anyString())).thenReturn("13.0400,80.2300");
+        stubRedisLocation("13.0400,80.2300");
 
         var location = deliveryService.getCurrentLocation(100L, seller);
 
@@ -134,7 +133,7 @@ class DeliveryServiceTest {
 
         when(assignmentRepository.findByOrderId(100L))
                 .thenReturn(Optional.of(assignment));
-        when(valueOperations.get(anyString())).thenReturn("13.0400,80.2300");
+        stubRedisLocation("13.0400,80.2300");
 
         var location = deliveryService.getCurrentLocation(100L, admin);
 
@@ -142,6 +141,11 @@ class DeliveryServiceTest {
         assertEquals(80.2300, location.getLongitude());
         verify(assignmentRepository).findByOrderId(100L);
         verify(assignmentRepository, never()).findAuthorizedByOrderId(anyLong(), anyLong());
+    }
+
+    private void stubRedisLocation(String location) {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenReturn(location);
     }
 
     private static User user(Long id, Role role) {
