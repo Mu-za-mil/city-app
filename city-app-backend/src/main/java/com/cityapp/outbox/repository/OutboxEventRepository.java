@@ -18,8 +18,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
          WHERE status = 'PENDING'
            AND available_at <= :now
          ORDER BY created_at, id
-         FOR UPDATE SKIP LOCKED
          LIMIT :batchSize
+         FOR UPDATE SKIP LOCKED
         """, nativeQuery = true)
     List<OutboxEvent> lockPendingEvents(
             @Param("now") Instant now,
