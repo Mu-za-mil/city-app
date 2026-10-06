@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS outbox_events;
+
 CREATE TABLE outbox_events (
     id BIGSERIAL PRIMARY KEY,
     event_id VARCHAR(36) NOT NULL UNIQUE,
