@@ -16,6 +16,7 @@ import org.slf4j.MDC;
 import com.cityapp.common.constants.AppConstants;
 import com.cityapp.common.event.EventPublisher;
 import com.cityapp.common.event.OrderStatusChangedEvent;
+import com.cityapp.outbox.service.OutboxService;
 import com.cityapp.common.event.PlaceOrderCommand;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
@@ -54,7 +55,7 @@ public class OrderService {
     private final PaymentRepository paymentRepository;
     private final OrderMapper orderMapper;
     private final EventPublisher eventPublisher;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxService outboxService;
 
     // Minimum order amount in Indian Rupees
     private static final BigDecimal MINIMUM_ORDER_AMOUNT = BigDecimal.ONE;
@@ -285,8 +286,10 @@ public class OrderService {
                 .timestamp(Instant.now())
                 .build();
 
-        kafkaTemplate.send(AppConstants.TOPIC_DEDUCT_STOCK,
-                String.valueOf(savedOrder.getId()), command);
+        outboxService.enqueue(
+                AppConstants.TOPIC_DEDUCT_STOCK,
+                String.valueOf(savedOrder.getId()),
+                command);
 
         log.info("Saga initiated: orderId={} sagaId={} items={}",
                 savedOrder.getId(), sagaId, itemSpecs.size());
