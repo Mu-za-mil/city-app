@@ -6,6 +6,7 @@ import com.cityapp.common.event.InventoryLowEvent;
 import com.cityapp.common.event.PlaceOrderCommand;
 import com.cityapp.common.event.StockDeductedEvent;
 import com.cityapp.product.entity.Inventory;
+import com.cityapp.outbox.service.OutboxService;
 import com.cityapp.product.repository.InventoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -76,7 +77,7 @@ import java.util.concurrent.TimeUnit;
 public class StockDeductionSagaHandler {
 
     private final InventoryRepository           inventoryRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxService outboxService;
     private final EventPublisher                 eventPublisher;
     private final StringRedisTemplate           redisTemplate;
 
@@ -218,7 +219,7 @@ public class StockDeductionSagaHandler {
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private void publishSuccess(PlaceOrderCommand command) {
-        kafkaTemplate.send(
+        outboxService.enqueue(
                 AppConstants.TOPIC_STOCK_DEDUCTED,
                 String.valueOf(command.getOrderId()),
                 StockDeductedEvent.builder()
@@ -226,12 +227,11 @@ public class StockDeductionSagaHandler {
                         .orderId(command.getOrderId())
                         .success(true)
                         .timestamp(Instant.now())
-                        .build()
-        );
+                        .build());
     }
 
     private void publishFailure(PlaceOrderCommand command, String reason) {
-        kafkaTemplate.send(
+        outboxService.enqueue(
                 AppConstants.TOPIC_STOCK_DEDUCTED,
                 String.valueOf(command.getOrderId()),
                 StockDeductedEvent.builder()
@@ -240,7 +240,6 @@ public class StockDeductionSagaHandler {
                         .success(false)
                         .failureReason(reason)
                         .timestamp(Instant.now())
-                        .build()
-        );
+                        .build());
     }
 }
