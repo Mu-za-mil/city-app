@@ -1,6 +1,7 @@
 package com.cityapp.outbox.service;
 
 import com.cityapp.outbox.entity.OutboxEvent;
+import com.cityapp.outbox.repository.OutboxEventRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +16,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OutboxService {
 
-    private final OutboxEventRepositoryAdapter repository;
+    private final OutboxEventRepository repository;
     private final ObjectMapper objectMapper;
 
     @Transactional(propagation = Propagation.MANDATORY)
