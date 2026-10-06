@@ -5,6 +5,7 @@ import com.cityapp.common.event.OrderCreatedEvent;
 import com.cityapp.common.event.OrderStatusChangedEvent;
 import com.cityapp.common.event.StockDeductedEvent;
 import com.cityapp.order.entity.Order;
+import com.cityapp.outbox.service.OutboxService;
 import com.cityapp.order.entity.OrderStatus;
 import com.cityapp.order.repository.OrderRepository;
 import com.cityapp.common.event.EventPublisher;
@@ -62,7 +63,7 @@ import java.util.concurrent.TimeUnit;
 public class SagaReplyConsumer {
 
     private final OrderRepository orderRepository;
-    private final EventPublisher  eventPublisher;
+    private final OutboxService outboxService;
 
     @KafkaListener(
             topics  = AppConstants.TOPIC_STOCK_DEDUCTED,
@@ -142,7 +143,9 @@ public class SagaReplyConsumer {
                         .build())
                 .toList();
 
-        eventPublisher.publishOrderCreated(
+        outboxService.enqueue(
+                AppConstants.TOPIC_ORDER_CREATED,
+                String.valueOf(order.getId()),
                 OrderCreatedEvent.builder()
                         .eventId(EventPublisher.generateEventId())
                         .orderId(order.getId())
@@ -168,7 +171,9 @@ public class SagaReplyConsumer {
                 order.getId(), event.getFailureReason());
 
         // Notify buyer: your order was cancelled
-        eventPublisher.publishOrderStatusChanged(
+        outboxService.enqueue(
+                AppConstants.TOPIC_ORDER_STATUS_CHANGED,
+                String.valueOf(order.getId()),
                 OrderStatusChangedEvent.builder()
                         .eventId(EventPublisher.generateEventId())
                         .orderId(order.getId())
