@@ -12,8 +12,18 @@ import java.util.List;
 
 public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> {
 
-    List<OutboxEvent> findTop100ByStatusAndAvailableAtLessThanEqualOrderByCreatedAtAsc(
-            OutboxStatus status, Instant now);
+    @Query(value = """
+        SELECT *
+          FROM outbox_events
+         WHERE status = 'PENDING'
+           AND available_at <= :now
+         ORDER BY created_at, id
+         FOR UPDATE SKIP LOCKED
+         LIMIT :batchSize
+        """, nativeQuery = true)
+    List<OutboxEvent> lockPendingEvents(
+            @Param("now") Instant now,
+            @Param("batchSize") int batchSize);
 
     @Modifying
     @Query("""
