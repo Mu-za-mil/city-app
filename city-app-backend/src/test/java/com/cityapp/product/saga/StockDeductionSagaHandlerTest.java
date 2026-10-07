@@ -143,4 +143,60 @@ class StockDeductionSagaHandlerTest {
         verifyNoInteractions(outboxService);
     }
 
+
+    @Test
+    void deductStock_shouldAcquireInventoryLocksInProductIdOrder() {
+        Inventory product10 = mock(Inventory.class);
+        Inventory product20 = mock(Inventory.class);
+        SagaStockDeduction existing = SagaStockDeduction.builder()
+                .id(1L).sagaId("saga-1").orderId(20L)
+                .status(SagaStockDeduction.Status.DEDUCTED)
+                .build();
+
+        when(inventoryRepository.findByProductIdForUpdate(10L)).thenReturn(Optional.of(product10));
+        when(inventoryRepository.findByProductIdForUpdate(20L)).thenReturn(Optional.of(product20));
+        when(deductionRepository.findBySagaIdForUpdate("saga-1"))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+
+        handler.onDeductStock(PlaceOrderCommand.builder()
+                .sagaId("saga-1")
+                .orderId(20L)
+                .items(List.of(
+                        PlaceOrderCommand.OrderItemSpec.builder().productId(20L).quantity(1).build(),
+                        PlaceOrderCommand.OrderItemSpec.builder().productId(10L).quantity(1).build()))
+                .build());
+
+        InOrder order = inOrder(inventoryRepository);
+        order.verify(inventoryRepository).findByProductIdForUpdate(10L);
+        order.verify(inventoryRepository).findByProductIdForUpdate(20L);
+        verifyNoMoreInteractions(inventoryRepository);
+    }
+
+    @Test
+    void restoreStock_shouldAcquireInventoryLocksInProductIdOrder() throws Exception {
+        PlaceOrderCommand.OrderItemSpec item20 =
+                PlaceOrderCommand.OrderItemSpec.builder().productId(20L).quantity(1).build();
+        PlaceOrderCommand.OrderItemSpec item10 =
+                PlaceOrderCommand.OrderItemSpec.builder().productId(10L).quantity(1).build();
+
+        SagaStockDeduction deduction = SagaStockDeduction.builder()
+                .id(1L).sagaId("saga-1").orderId(20L)
+                .itemsJson(objectMapper.writeValueAsString(List.of(item20, item10)))
+                .status(SagaStockDeduction.Status.DEDUCTED)
+                .build();
+
+        Inventory product10 = mock(Inventory.class);
+        Inventory product20 = mock(Inventory.class);
+        when(inventoryRepository.findByProductIdForUpdate(10L)).thenReturn(Optional.of(product10));
+        when(inventoryRepository.findByProductIdForUpdate(20L)).thenReturn(Optional.of(product20));
+        when(deductionRepository.findBySagaIdForUpdate("saga-1")).thenReturn(Optional.of(deduction));
+
+        handler.onRestoreStock(RestoreStockCommand.builder()
+                .sagaId("saga-1").orderId(20L).build());
+
+        InOrder order = inOrder(inventoryRepository);
+        order.verify(inventoryRepository).findByProductIdForUpdate(10L);
+        order.verify(inventoryRepository).findByProductIdForUpdate(20L);
+    }
+
 }
