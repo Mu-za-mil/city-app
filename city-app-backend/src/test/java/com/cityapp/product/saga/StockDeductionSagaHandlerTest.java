@@ -10,14 +10,12 @@ import com.cityapp.product.entity.SagaStockDeduction;
 import com.cityapp.product.repository.InventoryRepository;
 import com.cityapp.product.repository.SagaStockDeductionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.List;
 import java.util.Optional;
@@ -33,12 +31,20 @@ class StockDeductionSagaHandlerTest {
     @Mock SagaStockDeductionRepository deductionRepository;
     @Mock OutboxService outboxService;
     @Mock com.cityapp.common.event.EventPublisher eventPublisher;
-    @Mock StringRedisTemplate redisTemplate;
-    @Mock ValueOperations<String, String> valueOperations;
 
-    @InjectMocks StockDeductionSagaHandler handler;
+    private StockDeductionSagaHandler handler;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @BeforeEach
+    void setUp() {
+        handler = new StockDeductionSagaHandler(
+                inventoryRepository,
+                deductionRepository,
+                outboxService,
+                eventPublisher,
+                objectMapper);
+    }
 
     @Test
     void restoreStock_shouldRestoreAndMarkDeductionRestored() throws Exception {
