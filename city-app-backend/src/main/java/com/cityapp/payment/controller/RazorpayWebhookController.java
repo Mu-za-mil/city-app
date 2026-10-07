@@ -6,16 +6,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/payments/webhooks")
+@RequestMapping("/api/v1/webhooks/razorpay")
 @RequiredArgsConstructor
 public class RazorpayWebhookController {
+
     private final PaymentService paymentService;
 
-    @PostMapping("/razorpay")
-    public ResponseEntity<Void> handle(
+    @PostMapping
+    public ResponseEntity<Void> handleWebhook(
+            @RequestBody String rawBody,
             @RequestHeader("X-Razorpay-Signature") String signature,
-            @RequestHeader("X-Razorpay-Event-Id") String eventId,
-            @RequestBody String rawBody) {
+            @RequestHeader("X-Razorpay-Event-Id") String eventId) {
         paymentService.handleRazorpayWebhook(rawBody, signature, eventId);
         return ResponseEntity.ok().build();
     }
