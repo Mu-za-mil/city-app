@@ -148,6 +148,9 @@ class StockDeductionSagaHandlerTest {
     void deductStock_shouldAcquireInventoryLocksInProductIdOrder() {
         Inventory product10 = mock(Inventory.class);
         Inventory product20 = mock(Inventory.class);
+        when(product10.getQuantity()).thenReturn(100);
+        when(product20.getQuantity()).thenReturn(100);
+
         SagaStockDeduction existing = SagaStockDeduction.builder()
                 .id(1L).sagaId("saga-1").orderId(20L)
                 .status(SagaStockDeduction.Status.DEDUCTED)
