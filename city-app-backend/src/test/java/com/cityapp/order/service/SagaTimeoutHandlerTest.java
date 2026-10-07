@@ -7,6 +7,8 @@ import com.cityapp.order.entity.Order;
 import com.cityapp.order.entity.OrderStatus;
 import com.cityapp.order.repository.OrderRepository;
 import com.cityapp.outbox.service.OutboxService;
+import com.cityapp.store.entity.Store;
+import com.cityapp.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -31,8 +33,14 @@ class SagaTimeoutHandlerTest {
         when(order.getStatus()).thenReturn(OrderStatus.CREATED);
         when(order.getSagaId()).thenReturn("saga-1");
         when(order.getId()).thenReturn(20L);
-        when(order.getUser()).thenReturn(mock(com.cityapp.user.entity.User.class));
-        when(order.getStore()).thenReturn(mock(com.cityapp.store.entity.Store.class));
+        User owner = mock(User.class);
+        when(owner.getId()).thenReturn(3L);
+
+        Store store = mock(Store.class);
+        when(store.getOwner()).thenReturn(owner);
+
+        when(order.getUser()).thenReturn(mock(User.class));
+        when(order.getStore()).thenReturn(store);
 
         SagaTimeoutHandler handler = new SagaTimeoutHandler(orderRepository, outboxService);
         when(orderRepository.findCreatedOrdersOlderThan(any())).thenReturn(List.of(order));
