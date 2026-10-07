@@ -34,6 +34,8 @@ public interface AppConstants {
     String TOPIC_ORDER_STATUS_CHANGED = "order.status.changed";
     String TOPIC_DEDUCT_STOCK         = "deduct.stock";
     String TOPIC_STOCK_DEDUCTED       = "stock.deducted";
+    String TOPIC_RESTORE_STOCK         = "restore.stock";
+    String TOPIC_STOCK_RESTORED        = "stock.restored";
     String TOPIC_INVENTORY_LOW        = "inventory.low";
     String TOPIC_DELIVERY_ASSIGNED    = "delivery.assigned";
     String TOPIC_STORE_ANNOUNCEMENT   = "store.announcement";

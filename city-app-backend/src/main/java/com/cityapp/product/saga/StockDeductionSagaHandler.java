@@ -16,7 +16,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -35,25 +33,25 @@ public class StockDeductionSagaHandler {
     private final SagaStockDeductionRepository deductionRepository;
     private final OutboxService outboxService;
     private final EventPublisher eventPublisher;
-    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    private static final long SAGA_DEDUP_HOURS = 24L;
 
     @KafkaListener(topics = AppConstants.TOPIC_DEDUCT_STOCK,
             groupId = "inventory-service-deduct-stock")
     @Transactional
     public void onDeductStock(PlaceOrderCommand command) {
-        String dedupKey = AppConstants.REDIS_SAGA_PROCESSED + command.getOrderId();
-        Boolean isNew = redisTemplate.opsForValue()
-                .setIfAbsent(dedupKey, command.getSagaId(), SAGA_DEDUP_HOURS, TimeUnit.HOURS);
 
-        if (!Boolean.TRUE.equals(isNew)) {
-            SagaStockDeduction deduction = deductionRepository
-                    .findBySagaIdForUpdate(command.getSagaId()).orElse(null);
-            if (deduction != null && deduction.getStatus() == SagaStockDeduction.Status.DEDUCTED) {
+        // PostgreSQL is the source of truth for Saga idempotency.
+        // Redis cannot participate atomically in this DB transaction.
+        SagaStockDeduction existing = deductionRepository
+                .findBySagaIdForUpdate(command.getSagaId())
+                .orElse(null);
+
+        if (existing != null) {
+            if (existing.getStatus() == SagaStockDeduction.Status.DEDUCTED) {
                 publishSuccess(command);
             }
+            // RESTORED means this Saga was already compensated. Never deduct again.
             return;
         }
 
@@ -61,12 +59,10 @@ public class StockDeductionSagaHandler {
         for (PlaceOrderCommand.OrderItemSpec item : command.getItems()) {
             Inventory inv = inventoryRepository.findByProductIdForUpdate(item.getProductId()).orElse(null);
             if (inv == null) {
-                redisTemplate.delete(dedupKey);
                 publishFailure(command, "No inventory record for product: " + item.getProductId());
                 return;
             }
             if (inv.getQuantity() < item.getQuantity()) {
-                redisTemplate.delete(dedupKey);
                 publishFailure(command,
                         "Insufficient stock for product '" + inv.getProduct().getName()
                                 + "': available=" + inv.getQuantity()
@@ -74,6 +70,19 @@ public class StockDeductionSagaHandler {
                 return;
             }
             lockedInventories.add(inv);
+        }
+
+        // A concurrent delivery of the same Saga may have waited on the inventory
+        // lock. Re-check after acquiring it so it cannot deduct twice.
+        existing = deductionRepository
+                .findBySagaIdForUpdate(command.getSagaId())
+                .orElse(null);
+
+        if (existing != null) {
+            if (existing.getStatus() == SagaStockDeduction.Status.DEDUCTED) {
+                publishSuccess(command);
+            }
+            return;
         }
 
         for (int i = 0; i < command.getItems().size(); i++) {
