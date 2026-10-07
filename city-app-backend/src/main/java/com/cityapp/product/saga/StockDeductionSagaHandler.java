@@ -16,7 +16,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -35,10 +33,8 @@ public class StockDeductionSagaHandler {
     private final SagaStockDeductionRepository deductionRepository;
     private final OutboxService outboxService;
     private final EventPublisher eventPublisher;
-    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    private static final long SAGA_DEDUP_HOURS = 24L;
 
     @KafkaListener(topics = AppConstants.TOPIC_DEDUCT_STOCK,
             groupId = "inventory-service-deduct-stock")
