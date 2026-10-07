@@ -8,8 +8,6 @@ import java.security.MessageDigest;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
-import org.json.JSONObject;
-
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
@@ -311,9 +309,9 @@ public class PaymentService {
             byte[] expected = mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8));
             byte[] received = java.util.HexFormat.of().parseHex(signature);
             if (!MessageDigest.isEqual(expected, received)) {
-                throw AppException.unauthorized("Invalid Razorpay webhook signature");
+                throw new SecurityException("Signature mismatch");
             }
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException | SecurityException e) {
             throw AppException.unauthorized("Invalid Razorpay webhook signature");
         } catch (Exception e) {
             throw new IllegalStateException("Unable to verify Razorpay webhook signature", e);
