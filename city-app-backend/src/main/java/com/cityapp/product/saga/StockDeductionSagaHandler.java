@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Slf4j
@@ -55,8 +56,15 @@ public class StockDeductionSagaHandler {
             return;
         }
 
+        // Always acquire inventory locks in the same order across transactions.
+        // Without this, Order A can lock product 10 then 20 while Order B locks
+        // product 20 then 10, creating a classic database deadlock.
+        List<PlaceOrderCommand.OrderItemSpec> sortedItems = command.getItems().stream()
+                .sorted(Comparator.comparing(PlaceOrderCommand.OrderItemSpec::getProductId))
+                .toList();
+
         List<Inventory> lockedInventories = new ArrayList<>();
-        for (PlaceOrderCommand.OrderItemSpec item : command.getItems()) {
+        for (PlaceOrderCommand.OrderItemSpec item : sortedItems) {
             Inventory inv = inventoryRepository.findByProductIdForUpdate(item.getProductId()).orElse(null);
             if (inv == null) {
                 publishFailure(command, "No inventory record for product: " + item.getProductId());
@@ -85,8 +93,8 @@ public class StockDeductionSagaHandler {
             return;
         }
 
-        for (int i = 0; i < command.getItems().size(); i++) {
-            var spec = command.getItems().get(i);
+        for (int i = 0; i < sortedItems.size(); i++) {
+            var spec = sortedItems.get(i);
             Inventory inv = lockedInventories.get(i);
             int newQty = inv.getQuantity() - spec.getQuantity();
             inv.setQuantity(newQty);
@@ -142,6 +150,11 @@ public class StockDeductionSagaHandler {
                     objectMapper.readValue(deduction.getItemsJson(),
                             objectMapper.getTypeFactory().constructCollectionType(
                                     List.class, PlaceOrderCommand.OrderItemSpec.class));
+
+            // Compensation must use the same global lock order as deduction.
+            items = items.stream()
+                    .sorted(Comparator.comparing(PlaceOrderCommand.OrderItemSpec::getProductId))
+                    .toList();
 
             for (PlaceOrderCommand.OrderItemSpec item : items) {
                 Inventory inv = inventoryRepository.findByProductIdForUpdate(item.getProductId())
