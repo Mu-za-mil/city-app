@@ -91,4 +91,49 @@ class StockDeductionSagaHandlerTest {
                 eq("20"),
                 any(StockRestoredEvent.class));
     }
+    @Test
+    void deductStock_shouldTreatExistingDeductionAsDuplicateWithoutChangingInventory() {
+        SagaStockDeduction deduction = SagaStockDeduction.builder()
+                .id(1L).sagaId("saga-1").orderId(20L)
+                .status(SagaStockDeduction.Status.DEDUCTED)
+                .build();
+
+        when(deductionRepository.findBySagaIdForUpdate("saga-1"))
+                .thenReturn(Optional.of(deduction));
+
+        handler.onDeductStock(PlaceOrderCommand.builder()
+                .sagaId("saga-1")
+                .orderId(20L)
+                .items(List.of(PlaceOrderCommand.OrderItemSpec.builder()
+                        .productId(10L).quantity(3).build()))
+                .build());
+
+        verifyNoInteractions(inventoryRepository);
+        verify(outboxService).enqueue(
+                eq(AppConstants.TOPIC_STOCK_DEDUCTED),
+                eq("20"),
+                any(com.cityapp.common.event.StockDeductedEvent.class));
+    }
+
+    @Test
+    void deductStock_shouldNotRedeductAfterSagaWasCompensated() {
+        SagaStockDeduction deduction = SagaStockDeduction.builder()
+                .id(1L).sagaId("saga-1").orderId(20L)
+                .status(SagaStockDeduction.Status.RESTORED)
+                .build();
+
+        when(deductionRepository.findBySagaIdForUpdate("saga-1"))
+                .thenReturn(Optional.of(deduction));
+
+        handler.onDeductStock(PlaceOrderCommand.builder()
+                .sagaId("saga-1")
+                .orderId(20L)
+                .items(List.of(PlaceOrderCommand.OrderItemSpec.builder()
+                        .productId(10L).quantity(3).build()))
+                .build());
+
+        verifyNoInteractions(inventoryRepository);
+        verifyNoInteractions(outboxService);
+    }
+
 }
