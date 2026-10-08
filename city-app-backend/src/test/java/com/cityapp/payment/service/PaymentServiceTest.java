@@ -8,8 +8,10 @@ import com.cityapp.order.repository.OrderRepository;
 import com.cityapp.payment.dto.InitiatePaymentRequest;
 import com.cityapp.payment.entity.Payment;
 import com.cityapp.payment.repository.PaymentRepository;
+import com.cityapp.payment.repository.PaymentWebhookEventRepository;
 import com.cityapp.payment.entity.Payment.PaymentStatus;
 import com.cityapp.user.entity.User;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -18,9 +20,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceTest {
@@ -31,8 +37,16 @@ class PaymentServiceTest {
     @Mock
     private OrderRepository orderRepository;
 
+    @Mock
+    private PaymentWebhookEventRepository webhookEventRepository;
+
     @InjectMocks
     private PaymentService paymentService;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(paymentService, "webhookSecret", "test-webhook-secret");
+    }
 
     @Test
     void initiatePayment_shouldRejectOrderOwnedByAnotherUser() {
@@ -99,6 +113,97 @@ class PaymentServiceTest {
 
         assertEquals(404, exception.getStatus().value());
         verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void webhook_shouldRejectInvalidSignature() {
+        String body = capturedPayload("order_rzp_1", "pay_1", 49900);
+
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> paymentService.handleRazorpayWebhook(body, "invalid", "evt_1"));
+
+        assertEquals(401, exception.getStatus().value());
+        verifyNoInteractions(webhookEventRepository, paymentRepository);
+    }
+
+    @Test
+    void webhook_shouldIgnoreDuplicateEvent() {
+        String body = capturedPayload("order_rzp_1", "pay_1", 49900);
+        when(webhookEventRepository.insertIfAbsent("evt_1", "payment.captured"))
+                .thenReturn(0);
+
+        paymentService.handleRazorpayWebhook(body, sign(body), "evt_1");
+
+        verify(webhookEventRepository).insertIfAbsent("evt_1", "payment.captured");
+        verifyNoInteractions(paymentRepository);
+    }
+
+    @Test
+    void webhook_shouldMarkPendingPaymentSuccessfulWhenAmountMatches() {
+        String body = capturedPayload("order_rzp_1", "pay_1", 49900);
+        Payment payment = Payment.builder()
+                .id(10L)
+                .amount(new BigDecimal("499.00"))
+                .currency("INR")
+                .method("RAZORPAY")
+                .gatewayOrderId("order_rzp_1")
+                .status(PaymentStatus.PENDING)
+                .build();
+
+        when(webhookEventRepository.insertIfAbsent("evt_1", "payment.captured"))
+                .thenReturn(1);
+        when(paymentRepository.findByGatewayOrderIdForUpdate("order_rzp_1"))
+                .thenReturn(Optional.of(payment));
+
+        paymentService.handleRazorpayWebhook(body, sign(body), "evt_1");
+
+        assertEquals(PaymentStatus.SUCCESS, payment.getStatus());
+        assertEquals("pay_1", payment.getGatewayPaymentId());
+        assertNotNull(payment.getPaidAt());
+        verify(paymentRepository).save(payment);
+    }
+
+    @Test
+    void webhook_shouldRejectAmountMismatch() {
+        String body = capturedPayload("order_rzp_1", "pay_1", 50000);
+        Payment payment = Payment.builder()
+                .id(10L)
+                .amount(new BigDecimal("499.00"))
+                .currency("INR")
+                .method("RAZORPAY")
+                .gatewayOrderId("order_rzp_1")
+                .status(PaymentStatus.PENDING)
+                .build();
+
+        when(webhookEventRepository.insertIfAbsent("evt_1", "payment.captured"))
+                .thenReturn(1);
+        when(paymentRepository.findByGatewayOrderIdForUpdate("order_rzp_1"))
+                .thenReturn(Optional.of(payment));
+
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> paymentService.handleRazorpayWebhook(body, sign(body), "evt_1"));
+
+        assertEquals(400, exception.getStatus().value());
+        assertEquals(PaymentStatus.PENDING, payment.getStatus());
+        verify(paymentRepository, never()).save(any());
+    }
+
+    private static String capturedPayload(String orderId, String paymentId, long amount) {
+        return """ 
+                {"event":"payment.captured","payload":{"payment":{"entity":{"id":"%s","order_id":"%s","amount":%d,"currency":"INR","status":"captured"}}}}
+                """.formatted(paymentId, orderId, amount);
+    }
+
+    private static String sign(String body) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec("test-webhook-secret".getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return java.util.HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static InitiatePaymentRequest request(Long orderId, String method) {

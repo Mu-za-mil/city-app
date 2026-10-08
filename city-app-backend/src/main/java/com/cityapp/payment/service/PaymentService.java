@@ -3,6 +3,10 @@ package com.cityapp.payment.service;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.json.JSONObject;
@@ -18,6 +22,7 @@ import com.cityapp.payment.dto.InitiatePaymentRequest;
 import com.cityapp.payment.dto.PaymentResponse;
 import com.cityapp.payment.entity.Payment;
 import com.cityapp.payment.repository.PaymentRepository;
+import com.cityapp.payment.repository.PaymentWebhookEventRepository;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 
@@ -45,12 +50,16 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository   orderRepository;
+    private final PaymentWebhookEventRepository webhookEventRepository;
 
     @Value("${cityapp.razorpay.key-id}")
     private String razorpayKeyId;
 
     @Value("${cityapp.razorpay.key-secret}")
     private String razorpayKeySecret;
+
+    @Value("${cityapp.razorpay.webhook-secret}")
+    private String webhookSecret;
 
     @CircuitBreaker(
             name = "razorpay",
@@ -233,19 +242,80 @@ public class PaymentService {
      * This is the ACTUAL confirmation that money changed hands.
      */
     @Transactional
-    public void confirmRazorpayPayment(String razorpayOrderId,
-                                       String razorpayPaymentId) {
-        Payment payment = paymentRepository.findByGatewayOrderId(razorpayOrderId)
-                .orElseThrow(() -> AppException.notFound(
-                        "Payment not found for razorpayOrderId=" + razorpayOrderId));
+    public void handleRazorpayWebhook(String rawBody, String signature, String eventId) {
+        verifyWebhookSignature(rawBody, signature);
 
-        payment.setGatewayPaymentId(razorpayPaymentId);
-        payment.setStatus(Payment.PaymentStatus.SUCCESS);
-        payment.setPaidAt(Instant.now());
-        paymentRepository.save(payment);
+        if (eventId == null || eventId.isBlank()) {
+            throw AppException.badRequest("Missing Razorpay event ID");
+        }
 
-        log.info("Payment confirmed: orderId={} razorpayPaymentId={}",
-                payment.getOrder().getId(), razorpayPaymentId);
+        JSONObject payload = new JSONObject(rawBody);
+        String eventType = payload.optString("event", "");
+        int inserted = webhookEventRepository.insertIfAbsent(eventId, eventType);
+        if (inserted == 0) {
+            log.info("Ignoring duplicate Razorpay webhook eventId={}", eventId);
+            return;
+        }
+
+        if (!"payment.captured".equals(eventType) && !"payment.failed".equals(eventType)) {
+            log.info("Ignoring unsupported Razorpay event type={} eventId={}", eventType, eventId);
+            return;
+        }
+
+        JSONObject entity = payload.getJSONObject("payload")
+                .getJSONObject("payment")
+                .getJSONObject("entity");
+        String razorpayOrderId = entity.getString("order_id");
+        String razorpayPaymentId = entity.getString("id");
+        long amountPaise = entity.getLong("amount");
+        String currency = entity.getString("currency");
+
+        Payment payment = paymentRepository.findByGatewayOrderIdForUpdate(razorpayOrderId)
+                .orElseThrow(() -> AppException.notFound("Payment not found for Razorpay order"));
+
+        if (!"RAZORPAY".equalsIgnoreCase(payment.getMethod())) {
+            throw AppException.badRequest("Webhook does not belong to a Razorpay payment");
+        }
+        if (payment.getAmount().movePointRight(2).longValueExact() != amountPaise) {
+            throw AppException.badRequest("Webhook amount does not match payment amount");
+        }
+        if (!payment.getCurrency().equalsIgnoreCase(currency)) {
+            throw AppException.badRequest("Webhook currency does not match payment currency");
+        }
+
+        if ("payment.captured".equals(eventType)) {
+            if (payment.getStatus() == Payment.PaymentStatus.SUCCESS) {
+                return;
+            }
+            if (payment.getStatus() != Payment.PaymentStatus.PENDING) {
+                log.warn("Ignoring captured event for paymentId={} status={}", payment.getId(), payment.getStatus());
+                return;
+            }
+            payment.setGatewayPaymentId(razorpayPaymentId);
+            payment.setStatus(Payment.PaymentStatus.SUCCESS);
+            payment.setPaidAt(Instant.now());
+            paymentRepository.save(payment);
+        } else if (payment.getStatus() == Payment.PaymentStatus.PENDING) {
+            payment.setGatewayPaymentId(razorpayPaymentId);
+            payment.setStatus(Payment.PaymentStatus.FAILED);
+            paymentRepository.save(payment);
+        }
+    }
+
+    private void verifyWebhookSignature(String rawBody, String signature) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] expected = mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8));
+            byte[] received = java.util.HexFormat.of().parseHex(signature);
+            if (!MessageDigest.isEqual(expected, received)) {
+                throw new SecurityException("Signature mismatch");
+            }
+        } catch (IllegalArgumentException | SecurityException e) {
+            throw AppException.unauthorized("Invalid Razorpay webhook signature");
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to verify Razorpay webhook signature", e);
+        }
     }
 
     private PaymentResponse buildResponse(Payment payment) {
