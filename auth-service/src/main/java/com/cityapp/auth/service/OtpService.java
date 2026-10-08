@@ -33,7 +33,7 @@ public class OtpService {
 
     private static final SecureRandom random = new SecureRandom();
 
-    public String generateAndSendOtp(String phone) {
+    public void generateAndSendOtp(String phone) {
         // 1. Throttle: max 5 OTP requests per hour per phone
         String throttleKey = AppConstants.REDIS_OTP_THROTTLE_PREFIX + phone;
         Long count = redisTemplate.opsForValue().increment(throttleKey);
@@ -66,9 +66,6 @@ public class OtpService {
             log.debug("OTP generated for phone {} but no user found; email event not published", phone);
         }
 
-        // 5. (Optional) Send SMS if enabled – you can call SmsService here.
-
-        return otp;  // Return OTP for dev debugging (remove in production)
     }
 
     public AuthResponse verifyOtp(VerifyOtpRequest req, HttpServletRequest httpRequest) {
