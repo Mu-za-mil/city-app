@@ -40,6 +40,14 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
         return findByIdAndOwnerIdAndStatusNot(id, ownerId, StoreStatus.CLOSED);
     }
 
+    /**
+     * Ownership-only lookup for historical seller data. Unlike findByIdAndOwnerId,
+     * this deliberately includes CLOSED stores so sellers can still view past orders.
+     */
+    @Query("select s from Store s where s.id = :storeId and s.owner.id = :ownerId")
+    Optional<Store> findOwnedStoreById(@Param("storeId") Long storeId,
+                                       @Param("ownerId") Long ownerId);
+
     // Seller's store list
     Page<Store> findByOwnerIdOrderByCreatedAtDesc(Long ownerId, Pageable pageable);
 
