@@ -6,7 +6,6 @@ import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.BucketConfiguration;
-import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
