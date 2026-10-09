@@ -1,5 +1,6 @@
 package com.cityapp.order.service;
 
+import com.cityapp.common.constants.AppConstants;
 import com.cityapp.common.event.EventPublisher;
 import com.cityapp.common.event.OrderStatusChangedEvent;
 import com.cityapp.order.dto.OrderResponse;
@@ -37,7 +38,6 @@ class OrderStatusEventTest {
     @Mock private StoreRepository storeRepository;
     @Mock private PaymentRepository paymentRepository;
     @Mock private OrderMapper orderMapper;
-    @Mock private EventPublisher eventPublisher;
     @Mock private OutboxService outboxService;
 
     @InjectMocks private OrderService orderService;
@@ -62,10 +62,16 @@ class OrderStatusEventTest {
 
         ArgumentCaptor<OrderStatusChangedEvent> captor =
                 ArgumentCaptor.forClass(OrderStatusChangedEvent.class);
-        verify(eventPublisher).publishOrderStatusChanged(captor.capture());
+        ArgumentCaptor<String> eventIdCaptor = ArgumentCaptor.forClass(String.class);
+        verify(outboxService).enqueue(
+                eq(AppConstants.TOPIC_ORDER_STATUS_CHANGED),
+                eq("100"),
+                captor.capture(),
+                eventIdCaptor.capture());
         assertEquals(OrderStatus.CONFIRMED, captor.getValue().getPreviousStatus());
         assertEquals(OrderStatus.PREPARING, captor.getValue().getNewStatus());
         assertEquals(100L, captor.getValue().getOrderId());
+        assertEquals(eventIdCaptor.getValue(), captor.getValue().getEventId());
     }
 
     @Test
@@ -85,10 +91,16 @@ class OrderStatusEventTest {
 
         ArgumentCaptor<OrderStatusChangedEvent> captor =
                 ArgumentCaptor.forClass(OrderStatusChangedEvent.class);
-        verify(eventPublisher).publishOrderStatusChanged(captor.capture());
+        ArgumentCaptor<String> eventIdCaptor = ArgumentCaptor.forClass(String.class);
+        verify(outboxService).enqueue(
+                eq(AppConstants.TOPIC_ORDER_STATUS_CHANGED),
+                eq("100"),
+                captor.capture(),
+                eventIdCaptor.capture());
         assertEquals(OrderStatus.CONFIRMED, captor.getValue().getPreviousStatus());
         assertEquals(OrderStatus.CANCELLED, captor.getValue().getNewStatus());
         assertEquals("Changed my mind", captor.getValue().getCancellationReason());
+        assertEquals(eventIdCaptor.getValue(), captor.getValue().getEventId());
     }
 
     private static User user(Long id) {
