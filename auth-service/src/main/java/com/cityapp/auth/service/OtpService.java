@@ -123,7 +123,10 @@ public class OtpService {
                 Integer.toString(AppConstants.OTP_MAX_VERIFY_ATTEMPTS),
                 Integer.toString(AppConstants.OTP_VERIFY_LOCKOUT_SECONDS));
 
-        if (result == null || result == -1L) {
+        if (result == null) {
+            throw AppException.serviceUnavailable("Unable to verify OTP. Please try again.");
+        }
+        if (result == -1L) {
             throw AppException.badRequest(
                     "OTP has expired or was never requested. Please request a new one.");
         }
