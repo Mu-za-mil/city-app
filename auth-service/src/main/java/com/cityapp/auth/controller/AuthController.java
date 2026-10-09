@@ -150,7 +150,6 @@ public class AuthController {
         OtpResponse response = OtpResponse.builder()
                 .sent(true)
                 .message("OTP sent successfully")
-                .otp(otp)  // Include OTP in dev for easy testing – remove in production
                 .build();
         return ResponseEntity.ok(ApiResponse.ok(response, "OTP sent"));
     }

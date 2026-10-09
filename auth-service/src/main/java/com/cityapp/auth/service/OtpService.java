@@ -14,10 +14,11 @@ import com.cityapp.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
-import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -33,15 +34,25 @@ public class OtpService {
 
     private static final SecureRandom random = new SecureRandom();
 
+    /**
+     * Increment and set the first-request expiry in one Redis operation.
+     * Keeping INCR and EXPIRE separate can leave a permanent counter if the
+     * application crashes between those commands.
+     */
+    private static final DefaultRedisScript<Long> OTP_THROTTLE_SCRIPT =
+            new DefaultRedisScript<>(
+                    "local count = redis.call('INCR', KEYS[1]); "
+                            + "if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]); end; "
+                            + "return count;",
+                    Long.class);
+
     public void generateAndSendOtp(String phone) {
         // 1. Throttle: max 5 OTP requests per hour per phone
         String throttleKey = AppConstants.REDIS_OTP_THROTTLE_PREFIX + phone;
-        Long count = redisTemplate.opsForValue().increment(throttleKey);
+        Long count = redisTemplate.execute(
+                OTP_THROTTLE_SCRIPT, List.of(throttleKey), "3600");
         if (count == null || count > 5) {
             throw AppException.badRequest("Too many OTP requests. Please try again later.");
-        }
-        if (count == 1) {
-            redisTemplate.expire(throttleKey, Duration.ofHours(1));
         }
 
         // 2. Generate a 6-digit OTP

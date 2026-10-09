@@ -317,8 +317,9 @@ cityapp:
       capacity: 5          # max 5 attempts
       refill-tokens: 5     # replenish 5 tokens
       refill-seconds: 900  # every 15 minutes
-      # Effect: 5 attempts per 15 minutes per IP+email.
-      # Attacker: blocked after 5 wrong attempts.
+      # Filter-level limit: 5 attempts per 15 minutes per client IP.
+      # Account-specific limits should be enforced separately after parsing
+      # and validating the login request; this pre-security filter uses IP only.
 
     # Registration
     register:
@@ -330,13 +331,14 @@ cityapp:
     otp:
       capacity: 3
       refill-tokens: 3
-      refill-seconds: 3600  # 3 OTPs per hour per phone number
+      refill-seconds: 3600  # 3 OTP endpoint requests per hour per client IP.
+      # OtpService also enforces a per-phone hourly limit from the JSON request.
 
     # General API (prevent scraping and abuse)
     api:
       capacity: 100
       refill-tokens: 100
-      refill-seconds: 60  # 100 requests per minute per user
+      refill-seconds: 60  # 100 requests per minute per client IP (pre-security filter).
 
 # ── ACTUATOR ─────────────────────────────────────────────────────────────────
 management:
