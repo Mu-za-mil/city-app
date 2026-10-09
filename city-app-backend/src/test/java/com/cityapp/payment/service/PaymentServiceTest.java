@@ -116,6 +116,72 @@ class PaymentServiceTest {
     }
 
     @Test
+    void initiatePayment_shouldRejectUnsupportedMethodBeforeLoadingOrder() {
+        InitiatePaymentRequest request = request(100L, "UPI");
+
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> paymentService.initiatePayment(request, 1L));
+
+        assertEquals(400, exception.getStatus().value());
+        verifyNoInteractions(orderRepository, paymentRepository);
+    }
+
+    @Test
+    void initiatePayment_shouldRejectDifferentMethodWhenPendingPaymentExists() {
+        Order order = confirmedOrder(100L, 1L);
+        Payment existing = Payment.builder()
+                .id(500L)
+                .order(order)
+                .amount(order.getTotalAmount())
+                .currency("INR")
+                .method("COD")
+                .status(PaymentStatus.PENDING)
+                .build();
+
+        when(orderRepository.findByIdAndUserIdForUpdate(100L, 1L))
+                .thenReturn(Optional.of(order));
+        when(paymentRepository.existsByOrderIdAndStatus(100L, PaymentStatus.SUCCESS))
+                .thenReturn(false);
+        when(paymentRepository.findTopByOrderIdOrderByCreatedAtDesc(100L))
+                .thenReturn(Optional.of(existing));
+
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> paymentService.initiatePayment(request(100L, "RAZORPAY"), 1L));
+
+        assertEquals(409, exception.getStatus().value());
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void initiatePayment_shouldReusePendingPaymentWhenMethodMatchesIgnoringCase() {
+        Order order = confirmedOrder(100L, 1L);
+        Payment existing = Payment.builder()
+                .id(500L)
+                .order(order)
+                .amount(order.getTotalAmount())
+                .currency("INR")
+                .method("COD")
+                .status(PaymentStatus.PENDING)
+                .build();
+
+        when(orderRepository.findByIdAndUserIdForUpdate(100L, 1L))
+                .thenReturn(Optional.of(order));
+        when(paymentRepository.existsByOrderIdAndStatus(100L, PaymentStatus.SUCCESS))
+                .thenReturn(false);
+        when(paymentRepository.findTopByOrderIdOrderByCreatedAtDesc(100L))
+                .thenReturn(Optional.of(existing));
+
+        var response = paymentService.initiatePayment(request(100L, " cod "), 1L);
+
+        assertEquals(500L, response.getPaymentId());
+        assertEquals("COD", response.getMethod());
+        assertEquals("PENDING", response.getStatus());
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
     void webhook_shouldRejectInvalidSignature() {
         String body = capturedPayload("order_rzp_1", "pay_1", 49900);
 
