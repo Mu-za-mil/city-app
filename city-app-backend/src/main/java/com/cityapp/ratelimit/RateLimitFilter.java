@@ -29,60 +29,29 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * HTTP Filter for API rate limiting.
+ * Redis-backed, distributed token-bucket rate limiting.
  *
- * RUNS BEFORE SECURITY FILTER CHAIN:
- *   @Order(1) ensures this filter runs before Spring Security's filters.
- *   Rate limiting is infrastructure-level — it runs before authentication.
- *   Why: an unauthenticated login attempt should be rate-limited too.
- *   If we ran after Spring Security: the security filter would process the
- *   request, hit the DB to look up the user, THEN we'd rate-limit.
- *   Wasteful: why do the DB work before deciding to reject?
+ * This filter runs before Spring Security, so it must not trust identity
+ * claims from an Authorization header: those claims have not been validated
+ * yet. All filter-level buckets therefore use the client IP. OTP sends have
+ * an additional phone-number limit in OtpService, which reads the validated
+ * JSON request DTO rather than servlet query parameters.
  *
- * BUCKET KEY DESIGN:
- *   Login:    "rl:login:{ip}:{email}"       — per IP + per email
- *   Register: "rl:register:{ip}"            — per IP only
- *   OTP:      "rl:otp:{phone}"              — per phone number
- *   General:  "rl:api:{userId}" or "rl:api:{ip}" — authenticated or anonymous
- *
- *   WHY COMPOSITE KEY (ip + email) FOR LOGIN:
- *   Attacker uses one IP: IP-based limit catches them after 5 attempts.
- *   Attacker rotates IPs (proxy network):
- *     IP-only rate limit: bypassed (different IP each time).
- *     Email-only rate limit: still works (same email target).
- *     Composite: attacker needs BOTH a fresh IP AND a fresh email for each attempt.
- *     Effectively prevents both IP rotation and account enumeration attacks.
- *
- * XFF SPOOFING PROTECTION (THE BUG WE FOUND):
- *   X-Forwarded-For (XFF) header: "real client IP" when behind a load balancer.
- *   Nginx/ALB: adds "X-Forwarded-For: 1.2.3.4" (real client IP).
- *   Without protection: attacker sends header themselves:
- *     curl -H "X-Forwarded-For: 127.0.0.1" POST /auth/login
- *   Server reads XFF "127.0.0.1" as the client IP.
- *   Rate limit key: "rl:login:127.0.0.1:ravi@test.com"
- *   Attacker creates a new "identity" by changing the XFF header.
- *   Rate limit is completely bypassed.
- *
- *   FIX: Only trust XFF from PRIVATE/LOOPBACK addresses.
- *   Public IPs in remoteAddr: the request came directly to us, not via LB.
- *   Sending XFF from a public IP: SPOOFING. Ignore the header. Use remoteAddr.
- *   Private IPs in remoteAddr (10.x, 172.x, 192.168.x): the request came via LB.
- *   LB is trusted (it's our own infrastructure). Use the XFF header.
- *
- *   This is a real vulnerability found in many rate limiting implementations.
- *   The fix is simple but non-obvious.
+ * Client IP policy: X-Forwarded-For is considered only when the direct peer is
+ * in a private/loopback range. Deployments must ensure only trusted proxies can
+ * reach the service on those network interfaces and that proxies overwrite XFF.
  */
 @Slf4j
 @Component
 @Order(1)
 public class RateLimitFilter implements Filter {
 
-    private final ProxyManager<byte[]>              proxyManager;
-    private final ObjectMapper                      objectMapper;
-    private final Supplier<BucketConfiguration>    loginBucketConfig;
-    private final Supplier<BucketConfiguration>    registerBucketConfig;
-    private final Supplier<BucketConfiguration>    otpBucketConfig;
-    private final Supplier<BucketConfiguration>    generalApiBucketConfig;
+    private final ProxyManager<byte[]> proxyManager;
+    private final ObjectMapper objectMapper;
+    private final Supplier<BucketConfiguration> loginBucketConfig;
+    private final Supplier<BucketConfiguration> registerBucketConfig;
+    private final Supplier<BucketConfiguration> otpBucketConfig;
+    private final Supplier<BucketConfiguration> generalApiBucketConfig;
 
     public RateLimitFilter(
             @Autowired(required = false) ProxyManager<byte[]> proxyManager,
@@ -105,51 +74,35 @@ public class RateLimitFilter implements Filter {
     @Override
     public void doFilter(ServletRequest req, ServletResponse res,
                          FilterChain chain) throws IOException, ServletException {
-
-        HttpServletRequest  request  = (HttpServletRequest)  req;
+        HttpServletRequest request = (HttpServletRequest) req;
         HttpServletResponse response = (HttpServletResponse) res;
 
-        // Rate limiting disabled (dev mode or via config)
         if (!rateLimitEnabled || proxyManager == null) {
             chain.doFilter(req, res);
             return;
         }
 
-        String path   = request.getRequestURI();
+        String path = request.getRequestURI();
         String method = request.getMethod();
-        String ip     = extractClientIp(request);
-
-        // ── Apply rate limits per endpoint ────────────────────────────────────
-
+        String ip = extractClientIp(request);
         String bucketKey = null;
         Supplier<BucketConfiguration> bucketConfig = null;
 
         if ("POST".equals(method) && path.endsWith("/auth/login")) {
-
-            // Rate limit by IP
-            bucketKey = "rl:login:" + ip;
+            bucketKey = "rl:login:ip:" + ip;
             bucketConfig = loginBucketConfig;
-
         } else if ("POST".equals(method) && path.endsWith("/auth/register")) {
-
-            bucketKey = "rl:register:" + ip;
+            bucketKey = "rl:register:ip:" + ip;
             bucketConfig = registerBucketConfig;
-
-        } else if (path.contains("/auth/otp")) {
-
-            String phone = request.getParameter("phone");
-
-            bucketKey = "rl:otp:" + (phone != null ? phone : ip);
+        } else if ("POST".equals(method)
+                && (path.endsWith("/auth/otp/send") || path.endsWith("/auth/otp/verify"))) {
+            // IP bucket protects the endpoint even when JSON is malformed or
+            // phone is missing. OtpService separately limits by normalized phone.
+            bucketKey = "rl:otp:ip:" + ip;
             bucketConfig = otpBucketConfig;
-
         } else if (path.startsWith("/api/")) {
-
-            String userId = extractUserIdFromToken(request);
-
-            bucketKey = userId != null
-                    ? "rl:api:user:" + userId
-                    : "rl:api:ip:" + ip;
-
+            // Do not decode an unverified JWT to choose a rate-limit identity.
+            bucketKey = "rl:api:ip:" + ip;
             bucketConfig = generalApiBucketConfig;
         }
 
@@ -157,130 +110,66 @@ public class RateLimitFilter implements Filter {
             chain.doFilter(req, res);
             return;
         }
-        // ── Check and consume a token ─────────────────────────────────────────
 
         Bucket bucket = proxyManager.builder()
                 .build(bucketKey.getBytes(StandardCharsets.UTF_8), bucketConfig);
-
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
 
         if (probe.isConsumed()) {
-            // Request allowed. Add rate limit headers for client awareness.
-            response.addHeader("X-Rate-Limit-Remaining",
+            response.setHeader("X-Rate-Limit-Remaining",
                     String.valueOf(probe.getRemainingTokens()));
             chain.doFilter(req, res);
-
-        } else {
-            // Rate limit exceeded. Reject with 429.
-            long waitForRefill = Math.max(
-                    1,
-                    (long) Math.ceil(
-                            probe.getNanosToWaitForRefill() / 1_000_000_000.0
-                    )
-            );
-            log.warn("Rate limit exceeded: path={} key={} waitSeconds={}",
-                    path, bucketKey, waitForRefill);
-
-            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.addHeader("X-Rate-Limit-Retry-After-Seconds",
-                    String.valueOf(waitForRefill));
-
-            ApiResponse<Void> rateLimitResponse = ApiResponse.error(
-                    "RATE_LIMIT_EXCEEDED",
-                    "Too many requests. Please wait " + waitForRefill +
-                            " seconds before trying again."
-            );
-
-            response.getWriter().write(
-                    objectMapper.writeValueAsString(rateLimitResponse));
+            return;
         }
+
+        long waitForRefill = Math.max(1L,
+                (long) Math.ceil(probe.getNanosToWaitForRefill() / 1_000_000_000.0));
+        // Never log the full bucket key: it may contain an IP address.
+        log.warn("Rate limit exceeded: path={} waitSeconds={}", path, waitForRefill);
+        response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setHeader("Retry-After", String.valueOf(waitForRefill));
+        response.setHeader("X-Rate-Limit-Retry-After-Seconds", String.valueOf(waitForRefill));
+
+        ApiResponse<Void> body = ApiResponse.error(
+                "RATE_LIMIT_EXCEEDED",
+                "Too many requests. Please wait " + waitForRefill
+                        + " seconds before trying again.");
+        response.getWriter().write(objectMapper.writeValueAsString(body));
     }
 
-    // ── IP Extraction (XFF Spoofing Protection) ────────────────────────────────
-
-    /**
-     * Extract the real client IP address, with protection against XFF spoofing.
-     *
-     * VULNERABILITY WITHOUT THIS METHOD:
-     *   request.getHeader("X-Forwarded-For")
-     *   Attacker sends: X-Forwarded-For: 127.0.0.1
-     *   Server trusts it: client IP = 127.0.0.1
-     *   Rate limit key: "rl:login:127.0.0.1:..."
-     *   Attacker changes XFF each request: bypasses per-IP limits completely.
-     *
-     * FIX: Trust XFF only from private network addresses (our own load balancers).
-     *   Public IP in remoteAddr: request is direct. XFF can be spoofed. Use remoteAddr.
-     *   Private IP in remoteAddr: request via our LB. LB adds XFF. Trust it.
-     */
     String extractClientIp(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
-
-        // Is the request coming from a trusted source (our load balancer)?
         if (isPrivateOrLoopback(remoteAddr)) {
-            // Trust X-Forwarded-For from our infrastructure
             String xForwardedFor = request.getHeader("X-Forwarded-For");
             if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-                // XFF may contain a chain: "client, proxy1, proxy2"
-                // The FIRST entry is the original client IP.
-                String clientIp = xForwardedFor.split(",")[0].trim();
-                if (!clientIp.isBlank()) {
-                    return clientIp;
+                String first = xForwardedFor.split(",")[0].trim();
+                if (!first.isBlank()) {
+                    return first;
                 }
             }
         }
-        // Direct connection (no trusted proxy) or XFF not provided:
-        // Use the actual socket address.
         return remoteAddr;
     }
 
     private boolean isPrivateOrLoopback(String ip) {
         if (ip == null) return false;
-        return ip.startsWith("127.")        // loopback
-                || ip.startsWith("10.")         // Class A private
-                || ip.startsWith("172.16.")     // Class B private (172.16.x.x - 172.31.x.x)
-                || ip.startsWith("172.17.")
-                || ip.startsWith("172.18.")
-                || ip.startsWith("172.19.")
-                || ip.startsWith("172.20.")
-                || ip.startsWith("172.21.")
-                || ip.startsWith("172.22.")
-                || ip.startsWith("172.23.")
-                || ip.startsWith("172.24.")
-                || ip.startsWith("172.25.")
-                || ip.startsWith("172.26.")
-                || ip.startsWith("172.27.")
-                || ip.startsWith("172.28.")
-                || ip.startsWith("172.29.")
-                || ip.startsWith("172.30.")
-                || ip.startsWith("172.31.")
-                || ip.startsWith("192.168.")    // Class C private
-                || ip.equals("::1")             // IPv6 loopback
-                || ip.equals("0:0:0:0:0:0:0:1");
-    }
-
-
-    /**
-     * Extract userId from JWT for authenticated rate limiting.
-     * Does NOT fully validate the JWT (SecurityConfig does that).
-     * Just reads the claim for rate limit key selection.
-     */
-    private String extractUserIdFromToken(HttpServletRequest request) {
-        String auth = request.getHeader("Authorization");
-        if (auth == null || !auth.startsWith("Bearer ")) return null;
-        try {
-            // JWT payload is base64url-encoded middle segment
-            String[] parts = auth.substring(7).split("\\.");
-            if (parts.length < 2) return null;
-            String payload = new String(java.util.Base64.getUrlDecoder()
-                    .decode(parts[1]));
-            // Extract sub (email) as userId proxy — fast, no crypto
-            int subStart = payload.indexOf("\"sub\":\"") + 7;
-            if (subStart < 7) return null;
-            int subEnd = payload.indexOf("\"", subStart);
-            return payload.substring(subStart, subEnd);
-        } catch (Exception e) {
-            return null;
+        if (ip.startsWith("127.") || ip.startsWith("10.")
+                || ip.startsWith("192.168.") || ip.equals("::1")
+                || ip.equals("0:0:0:0:0:0:0:1")) {
+            return true;
         }
+        if (ip.startsWith("172.")) {
+            String[] parts = ip.split("\\.");
+            if (parts.length >= 2) {
+                try {
+                    int secondOctet = Integer.parseInt(parts[1]);
+                    return secondOctet >= 16 && secondOctet <= 31;
+                } catch (NumberFormatException ignored) {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 }
