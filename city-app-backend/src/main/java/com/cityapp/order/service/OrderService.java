@@ -54,7 +54,6 @@ public class OrderService {
     private final StoreRepository storeRepository;
     private final PaymentRepository paymentRepository;
     private final OrderMapper orderMapper;
-    private final EventPublisher eventPublisher;
     private final OutboxService outboxService;
 
     // Minimum order amount in Indian Rupees
@@ -344,17 +343,23 @@ public class OrderService {
 
         Order saved = orderRepository.save(order);
 
-        eventPublisher.publishOrderStatusChanged(
-                OrderStatusChangedEvent.builder()
-                        .eventId(EventPublisher.generateEventId())
-                        .orderId(saved.getId())
-                        .userId(saved.getUser().getId())
-                        .sellerId(saved.getStore().getOwner().getId())
-                        .previousStatus(previousStatus)
-                        .newStatus(req.getStatus())
-                        .cancellationReason(req.getCancellationReason())
-                        .timestamp(Instant.now())
-                        .build());
+        String eventId = EventPublisher.generateEventId();
+        OrderStatusChangedEvent event = OrderStatusChangedEvent.builder()
+                .eventId(eventId)
+                .orderId(saved.getId())
+                .userId(saved.getUser().getId())
+                .sellerId(saved.getStore().getOwner().getId())
+                .previousStatus(previousStatus)
+                .newStatus(req.getStatus())
+                .cancellationReason(req.getCancellationReason())
+                .timestamp(Instant.now())
+                .build();
+
+        outboxService.enqueue(
+                AppConstants.TOPIC_ORDER_STATUS_CHANGED,
+                String.valueOf(saved.getId()),
+                event,
+                eventId);
 
         log.info("Order status updated: id={} status={}", orderId, req.getStatus());
         return buildOrderResponse(saved);
@@ -383,17 +388,23 @@ public class OrderService {
 
         Order saved = orderRepository.save(order);
 
-        eventPublisher.publishOrderStatusChanged(
-                OrderStatusChangedEvent.builder()
-                        .eventId(EventPublisher.generateEventId())
-                        .orderId(saved.getId())
-                        .userId(saved.getUser().getId())
-                        .sellerId(saved.getStore().getOwner().getId())
-                        .previousStatus(previousStatus)
-                        .newStatus(OrderStatus.CANCELLED)
-                        .cancellationReason(reason)
-                        .timestamp(Instant.now())
-                        .build());
+        String eventId = EventPublisher.generateEventId();
+        OrderStatusChangedEvent event = OrderStatusChangedEvent.builder()
+                .eventId(eventId)
+                .orderId(saved.getId())
+                .userId(saved.getUser().getId())
+                .sellerId(saved.getStore().getOwner().getId())
+                .previousStatus(previousStatus)
+                .newStatus(OrderStatus.CANCELLED)
+                .cancellationReason(reason)
+                .timestamp(Instant.now())
+                .build();
+
+        outboxService.enqueue(
+                AppConstants.TOPIC_ORDER_STATUS_CHANGED,
+                String.valueOf(saved.getId()),
+                event,
+                eventId);
 
         log.info("Order cancelled by buyer: id={} reason={}", orderId, reason);
         return buildOrderResponse(saved);
