@@ -33,7 +33,6 @@ public class StockDeductionSagaHandler {
     private final InventoryRepository inventoryRepository;
     private final SagaStockDeductionRepository deductionRepository;
     private final OutboxService outboxService;
-    private final EventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
 
