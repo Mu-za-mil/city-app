@@ -8,5 +8,4 @@ import lombok.Getter;
 public class OtpResponse {
     private boolean sent;
     private String message;
-    private String otp;  // dev only
 }
