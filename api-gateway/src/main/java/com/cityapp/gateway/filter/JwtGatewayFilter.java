@@ -86,7 +86,9 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
         } catch (io.jsonwebtoken.ExpiredJwtException e) {
             return reject(exchange, HttpStatus.UNAUTHORIZED, "Token expired");
         } catch (Exception e) {
-            log.warn("JWT validation failed for path {}: {}", path, e.getMessage());
+            // Never log token material or parser details derived from an untrusted credential.
+            log.warn("JWT validation failed for path={} exceptionType={}",
+                    path, e.getClass().getSimpleName());
             return reject(exchange, HttpStatus.UNAUTHORIZED, "Invalid token");
         }
     }
