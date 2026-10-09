@@ -21,9 +21,22 @@ public class OutboxService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void enqueue(String topic, String messageKey, Object event) {
+        enqueue(topic, messageKey, event, UUID.randomUUID().toString());
+    }
+
+    /**
+     * Enqueues an event with a caller-provided ID so the ID persisted in the
+     * outbox matches the ID inside the serialized event payload.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void enqueue(String topic, String messageKey, Object event, String eventId) {
+        if (eventId == null || eventId.isBlank()) {
+            throw new IllegalArgumentException("eventId must not be blank");
+        }
+
         try {
             repository.save(OutboxEvent.builder()
-                    .eventId(UUID.randomUUID().toString())
+                    .eventId(eventId)
                     .topic(topic)
                     .messageKey(messageKey)
                     .eventType(event.getClass().getName())
