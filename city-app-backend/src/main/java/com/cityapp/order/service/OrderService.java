@@ -450,7 +450,7 @@ public class OrderService {
                                                       OrderStatus status,
                                                       Pageable pageable) {
         // Hide whether a store exists when the authenticated seller does not own it.
-        storeRepository.findByIdAndOwnerId(storeId, sellerId)
+        storeRepository.findOwnedStoreById(storeId, sellerId)
                 .orElseThrow(() -> AppException.notFound("Store not found: " + storeId));
 
         Page<Order> page = status != null
