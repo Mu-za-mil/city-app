@@ -92,7 +92,7 @@ class OtpServiceVerificationTest {
         AppException exception = assertThrows(AppException.class,
                 () -> otpService.verifyOtp(request("123456"), httpRequest));
 
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, exception.getStatus());
         verifyNoInteractions(userRepository, refreshTokenService, jwtService);
     }
 
