@@ -1,11 +1,15 @@
 package com.cityapp.product.saga;
 
 import com.cityapp.common.constants.AppConstants;
+import com.cityapp.common.event.InventoryLowEvent;
 import com.cityapp.common.event.PlaceOrderCommand;
 import com.cityapp.common.event.RestoreStockCommand;
 import com.cityapp.common.event.StockRestoredEvent;
 import com.cityapp.outbox.service.OutboxService;
 import com.cityapp.product.entity.Inventory;
+import com.cityapp.product.entity.Product;
+import com.cityapp.store.entity.Store;
+import com.cityapp.user.entity.User;
 import com.cityapp.product.entity.SagaStockDeduction;
 import com.cityapp.product.repository.InventoryRepository;
 import com.cityapp.product.repository.SagaStockDeductionRepository;
@@ -45,6 +49,43 @@ class StockDeductionSagaHandlerTest {
                 outboxService,
                 eventPublisher,
                 objectMapper);
+    }
+
+    @Test
+    void deductStock_shouldEnqueueLowStockEventInSameTransaction() throws Exception {
+        User owner = mock(User.class);
+        when(owner.getId()).thenReturn(7L);
+        Store store = mock(Store.class);
+        when(store.getId()).thenReturn(3L);
+        when(store.getOwner()).thenReturn(owner);
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(10L);
+        when(product.getName()).thenReturn("Coffee");
+        when(product.getStore()).thenReturn(store);
+
+        Inventory inventory = mock(Inventory.class);
+        when(inventory.getProduct()).thenReturn(product);
+        when(inventory.getQuantity()).thenReturn(5);
+        when(inventory.getLowStockThreshold()).thenReturn(5);
+
+        when(inventoryRepository.findByProductIdForUpdate(10L))
+                .thenReturn(Optional.of(inventory));
+        when(deductionRepository.findBySagaIdForUpdate("saga-low-stock"))
+                .thenReturn(Optional.empty(), Optional.empty());
+
+        handler.onDeductStock(PlaceOrderCommand.builder()
+                .sagaId("saga-low-stock")
+                .orderId(20L)
+                .items(List.of(PlaceOrderCommand.OrderItemSpec.builder()
+                        .productId(10L).quantity(1).build()))
+                .build());
+
+        verify(inventory).setQuantity(4);
+        verify(outboxService).enqueue(
+                eq(AppConstants.TOPIC_INVENTORY_LOW),
+                eq("10"),
+                any(InventoryLowEvent.class));
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
