@@ -47,14 +47,14 @@ class StoreOrdersOwnershipTest {
         PageRequest pageable = PageRequest.of(0, 20);
         Store ownedStore = mock(Store.class);
 
-        when(storeRepository.findByIdAndOwnerId(storeId, sellerId))
+        when(storeRepository.findOwnedStoreById(storeId, sellerId))
                 .thenReturn(Optional.of(ownedStore));
         when(orderRepository.findByStoreIdOrderByCreatedAtDesc(storeId, pageable))
                 .thenReturn(Page.empty(pageable));
 
         orderService.getStoreOrders(storeId, sellerId, null, pageable);
 
-        verify(storeRepository).findByIdAndOwnerId(storeId, sellerId);
+        verify(storeRepository).findOwnedStoreById(storeId, sellerId);
         verify(orderRepository).findByStoreIdOrderByCreatedAtDesc(storeId, pageable);
         verify(orderRepository, never())
                 .findByStoreIdAndStatusOrderByCreatedAtDesc(anyLong(), any(), any());
@@ -66,7 +66,7 @@ class StoreOrdersOwnershipTest {
         Long sellerId = 7L;
         PageRequest pageable = PageRequest.of(0, 20);
 
-        when(storeRepository.findByIdAndOwnerId(storeId, sellerId))
+        when(storeRepository.findOwnedStoreById(storeId, sellerId))
                 .thenReturn(Optional.empty());
 
         AppException exception = assertThrows(
@@ -88,7 +88,7 @@ class StoreOrdersOwnershipTest {
         Long sellerId = 7L;
         PageRequest pageable = PageRequest.of(0, 20);
 
-        when(storeRepository.findByIdAndOwnerId(storeId, sellerId))
+        when(storeRepository.findOwnedStoreById(storeId, sellerId))
                 .thenReturn(Optional.empty());
 
         assertThrows(AppException.class,
