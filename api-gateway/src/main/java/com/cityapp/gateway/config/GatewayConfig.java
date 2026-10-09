@@ -3,33 +3,29 @@ package com.cityapp.gateway.config;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import reactor.core.publisher.Mono;
+
+import java.net.InetSocketAddress;
 
 @Configuration
 public class GatewayConfig {
 
     /**
-     * Rate limit key: use X-User-Id if present (authenticated user),
-     * else use IP address (unauthenticated request).
+     * The auth route is rate-limited before a trusted authenticated identity is
+     * available. Never use client-supplied identity headers as a rate-limit key:
+     * clients can spoof them. Use the request peer IP and fall back safely when
+     * the exchange has no resolved remote address.
      */
     @Bean
     public KeyResolver ipKeyResolver() {
         return exchange -> {
-            // Try authenticated user ID first
-            String userId = exchange.getRequest()
-                    .getHeaders()
-                    .getFirst("X-User-Id");
-
-            if (userId != null) {
-                return Mono.just("user:" + userId);
+            InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
+            if (remoteAddress == null || remoteAddress.getAddress() == null) {
+                return Mono.just("ip:unknown");
             }
 
-            // Fall back to IP address
-            return Mono.just("ip:" +
-                    exchange.getRequest()
-                            .getRemoteAddress()
-                            .getAddress()
-                            .getHostAddress());
+            return Mono.just("ip:" + remoteAddress.getAddress().getHostAddress());
         };
     }
 }
