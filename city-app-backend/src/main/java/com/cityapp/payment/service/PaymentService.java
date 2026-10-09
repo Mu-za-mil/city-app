@@ -3,6 +3,7 @@ package com.cityapp.payment.service;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Locale;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import javax.crypto.Mac;
@@ -71,6 +72,15 @@ public class PaymentService {
             InitiatePaymentRequest req,
             Long userId) {
 
+        // Normalize and validate the client-supplied method before touching order/payment state.
+        String requestedMethod = req.getMethod() == null
+                ? ""
+                : req.getMethod().trim().toUpperCase(Locale.ROOT);
+        if (!"COD".equals(requestedMethod) && !"RAZORPAY".equals(requestedMethod)) {
+            throw AppException.badRequest(
+                    "Unsupported payment method. Supported methods are COD and RAZORPAY");
+        }
+
         Order order = orderRepository.findByIdAndUserIdForUpdate(
                         req.getOrderId(), userId)
                 .orElseThrow(() ->
@@ -118,6 +128,12 @@ public class PaymentService {
                 }
 
                 case PENDING -> {
+                    if (!requestedMethod.equalsIgnoreCase(existing.getMethod())) {
+                        throw AppException.conflict(
+                                "A pending payment already exists with method "
+                                        + existing.getMethod()
+                                        + ". Complete or resolve that attempt before changing payment method.");
+                    }
 
                     log.info(
                             "Returning existing pending payment. orderId={} paymentId={}",
@@ -125,7 +141,7 @@ public class PaymentService {
                             existing.getId()
                     );
 
-                    // Idempotent response
+                    // Idempotent response: reuse only when the requested method matches.
                     return buildResponse(existing);
                 }
 
@@ -144,7 +160,7 @@ public class PaymentService {
 
         // New payment attempt
 
-        if ("COD".equalsIgnoreCase(req.getMethod())) {
+        if ("COD".equals(requestedMethod)) {
             return createCodPayment(order);
         }
 
