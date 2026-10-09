@@ -61,13 +61,14 @@ public class OrderController {
     @GetMapping("/store/{storeId}")
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> storeOrders(
+            @AuthenticationPrincipal User seller,
             @PathVariable Long storeId,
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 orderService.getStoreOrders(
-                        storeId, status,
+                        storeId, seller.getId(), status,
                         PageRequest.of(page, size,
                                 Sort.by("createdAt").descending()))));
     }
