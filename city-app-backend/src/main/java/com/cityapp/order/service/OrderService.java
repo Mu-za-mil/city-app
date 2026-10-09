@@ -95,12 +95,19 @@ public class OrderService {
         // ── Step 1: Idempotency Check ──────────────────────────────────────────
 
         if (req.getIdempotencyKey() != null) {
-            // If this idempotency key was used before: return the existing order.
-            // Client may be retrying due to a network failure. Safe to return existing.
+            // Idempotency keys are globally unique in the database. Before returning
+            // a prior result, ensure it belongs to this authenticated buyer.
             return orderRepository.findByIdempotencyKey(req.getIdempotencyKey())
                     .map(existingOrder -> {
-                        log.info("Idempotency hit: key={} returning existing orderId={}",
-                                req.getIdempotencyKey(), existingOrder.getId());
+                        if (!java.util.Objects.equals(
+                                existingOrder.getUser().getId(), buyer.getId())) {
+                            // Do not disclose the existing order or its details.
+                            throw AppException.conflict(
+                                    "Idempotency key has already been used");
+                        }
+
+                        log.info("Idempotency hit for an existing buyer order: orderId={}",
+                                existingOrder.getId());
                         return buildOrderResponse(existingOrder);
                     })
                     .orElseGet(() -> createNewOrder(buyer, req));
