@@ -101,16 +101,19 @@ public class StockDeductionSagaHandler {
             inventoryRepository.save(inv);
 
             if (newQty <= inv.getLowStockThreshold()) {
-                eventPublisher.publishInventoryLow(InventoryLowEvent.builder()
-                        .eventId(EventPublisher.generateEventId())
-                        .productId(inv.getProduct().getId())
-                        .productName(inv.getProduct().getName())
-                        .storeId(inv.getProduct().getStore().getId())
-                        .sellerId(inv.getProduct().getStore().getOwner().getId())
-                        .currentQuantity(newQty)
-                        .threshold(inv.getLowStockThreshold())
-                        .timestamp(Instant.now())
-                        .build());
+                outboxService.enqueue(
+                        AppConstants.TOPIC_INVENTORY_LOW,
+                        String.valueOf(inv.getProduct().getId()),
+                        InventoryLowEvent.builder()
+                                .eventId(EventPublisher.generateEventId())
+                                .productId(inv.getProduct().getId())
+                                .productName(inv.getProduct().getName())
+                                .storeId(inv.getProduct().getStore().getId())
+                                .sellerId(inv.getProduct().getStore().getOwner().getId())
+                                .currentQuantity(newQty)
+                                .threshold(inv.getLowStockThreshold())
+                                .timestamp(Instant.now())
+                                .build());
             }
         }
 
