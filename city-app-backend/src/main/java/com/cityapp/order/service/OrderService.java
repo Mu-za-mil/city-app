@@ -329,6 +329,9 @@ public class OrderService {
                             ". Invalid state machine transition.");
         }
 
+        // Capture the state before mutation so the event describes the real transition.
+        OrderStatus previousStatus = order.getStatus();
+
         // Special rules for CANCELLED status
         if (req.getStatus() == OrderStatus.CANCELLED) {
             validateCancellation(order, req.getCancellationReason());
@@ -347,7 +350,7 @@ public class OrderService {
                         .orderId(saved.getId())
                         .userId(saved.getUser().getId())
                         .sellerId(saved.getStore().getOwner().getId())
-                        .previousStatus(order.getStatus())  // status before update
+                        .previousStatus(previousStatus)
                         .newStatus(req.getStatus())
                         .cancellationReason(req.getCancellationReason())
                         .timestamp(Instant.now())
@@ -374,10 +377,24 @@ public class OrderService {
 
         validateCancellation(order, reason);
 
+        OrderStatus previousStatus = order.getStatus();
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancellationReason(reason);
 
         Order saved = orderRepository.save(order);
+
+        eventPublisher.publishOrderStatusChanged(
+                OrderStatusChangedEvent.builder()
+                        .eventId(EventPublisher.generateEventId())
+                        .orderId(saved.getId())
+                        .userId(saved.getUser().getId())
+                        .sellerId(saved.getStore().getOwner().getId())
+                        .previousStatus(previousStatus)
+                        .newStatus(OrderStatus.CANCELLED)
+                        .cancellationReason(reason)
+                        .timestamp(Instant.now())
+                        .build());
+
         log.info("Order cancelled by buyer: id={} reason={}", orderId, reason);
         return buildOrderResponse(saved);
     }
