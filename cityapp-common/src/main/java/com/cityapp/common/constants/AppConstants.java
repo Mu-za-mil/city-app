@@ -56,6 +56,9 @@ public interface AppConstants {
     String REDIS_OTP_THROTTLE_PREFIX  = "otp:throttle:";
     // Full key: otp:throttle:{phone} → otp:throttle:9876543210
 
+    String REDIS_OTP_ATTEMPTS_PREFIX  = "otp:attempts:";
+    // Full key: otp:attempts:{phone}; survives OTP re-issuance until its TTL expires
+
     String REDIS_JWT_BLACKLIST_PREFIX = "jwt:blacklist:";
     // Full key: jwt:blacklist:{token}
 
@@ -94,6 +97,8 @@ public interface AppConstants {
     int    OTP_EXPIRY_SECONDS         = 300;      // 5 minutes
     int    OTP_THROTTLE_SECONDS       = 3600;     // 1 hour
     int    OTP_MAX_PER_HOUR           = 5;
+    int    OTP_MAX_VERIFY_ATTEMPTS    = 5;       // Incorrect guesses allowed per lockout window
+    int    OTP_VERIFY_LOCKOUT_SECONDS = 900;     // 15 minutes; not reset by requesting another OTP
 
     int    MAX_SESSIONS_PER_USER      = 5;
     int    LOW_STOCK_DEDUP_HOURS      = 1;
