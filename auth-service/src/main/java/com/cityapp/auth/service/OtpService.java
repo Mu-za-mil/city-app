@@ -72,9 +72,10 @@ public class OtpService {
                             .name(user.getName())
                             .otp(otp)
                             .build());
-            log.info("OTP request published for email={} phone={}", user.getEmail(), phone);
+            // Never include contact details or OTP values in logs.
+            log.info("OTP delivery event published");
         } else {
-            log.debug("OTP generated for phone {} but no user found; email event not published", phone);
+            log.debug("OTP request received; no matching account, delivery event not published");
         }
 
         // 5. (Optional) Send SMS if enabled – you can call SmsService here.
@@ -146,7 +147,7 @@ public class OtpService {
         User user = userRepository.findByPhone(req.getPhone())
                 .orElseThrow(() -> AppException.notFound("User not found"));
 
-        log.info("OTP verified for phone={} userId={}", req.getPhone(), user.getId());
+        log.info("OTP verification successful");
 
         // Step 6: Generate access token (short-lived JWT)
         String accessToken = jwtService.generateAccessToken(user);
@@ -156,14 +157,10 @@ public class OtpService {
         String ipAddress  = extractClientIp(httpRequest);
         String userAgent  = httpRequest.getHeader("User-Agent");
 
-
         RefreshToken refreshToken = refreshTokenService
                 .createRefreshToken(user, deviceInfo, ipAddress, userAgent);
 
-        log.info("User logged in: id={} email={} device={}",
-                user.getId(), user.getEmail(), deviceInfo);
-
-
+        log.info("Authentication successful via OTP");
 
         return AuthResponse.builder()
                 .accessToken(accessToken)
