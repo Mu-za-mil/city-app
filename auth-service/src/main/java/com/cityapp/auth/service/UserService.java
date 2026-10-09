@@ -126,8 +126,7 @@ public class UserService implements UserDetailsService {
                         .registeredAt(saved.getCreatedAt())
                         .build());
 
-        log.info("User registered: id={} email={} role={}",
-                saved.getId(), saved.getEmail(), saved.getRole());
+        log.info("User registered: role={}", saved.getRole());
 
         return userMapper.toResponse(saved);
     }
@@ -171,8 +170,7 @@ public class UserService implements UserDetailsService {
         RefreshToken refreshToken = refreshTokenService
                 .createRefreshToken(user, deviceInfo, ipAddress, userAgent);
 
-        log.info("User logged in: id={} email={} device={}",
-                user.getId(), user.getEmail(), deviceInfo);
+        log.info("Authentication successful via password");
 
         return AuthResponse.builder()
                 .accessToken(accessToken)
