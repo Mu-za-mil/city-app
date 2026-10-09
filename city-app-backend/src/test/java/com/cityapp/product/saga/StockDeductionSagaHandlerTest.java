@@ -35,7 +35,6 @@ class StockDeductionSagaHandlerTest {
     @Mock InventoryRepository inventoryRepository;
     @Mock SagaStockDeductionRepository deductionRepository;
     @Mock OutboxService outboxService;
-    @Mock com.cityapp.common.event.EventPublisher eventPublisher;
 
     private StockDeductionSagaHandler handler;
 
@@ -47,7 +46,6 @@ class StockDeductionSagaHandlerTest {
                 inventoryRepository,
                 deductionRepository,
                 outboxService,
-                eventPublisher,
                 objectMapper);
     }
 
@@ -85,7 +83,6 @@ class StockDeductionSagaHandlerTest {
                 eq(AppConstants.TOPIC_INVENTORY_LOW),
                 eq("10"),
                 any(InventoryLowEvent.class));
-        verifyNoInteractions(eventPublisher);
     }
 
     @Test
