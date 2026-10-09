@@ -81,18 +81,64 @@ public class OtpService {
 
     }
 
-    public AuthResponse verifyOtp(VerifyOtpRequest req, HttpServletRequest httpRequest) {
-        String key = AppConstants.REDIS_OTP_PREFIX + req.getPhone();
-        String stored = redisTemplate.opsForValue().get(key);
+    /**
+     * Verify and consume an OTP atomically. Redis executes this script as one
+     * operation, so concurrent requests cannot both consume the same OTP or
+     * race past the failed-attempt limit.
+     *
+     * Status values: 1 = verified, 0 = wrong OTP, -1 = missing/expired OTP,
+     * -2 = attempt limit reached (locked).
+     *
+     * The attempt key is deliberately not cleared when a new OTP is issued.
+     * Its TTL starts on the first wrong guess, giving a fixed lockout window.
+     */
+    private static final DefaultRedisScript<Long> OTP_VERIFY_SCRIPT =
+            new DefaultRedisScript<>(
+                    "local attempts = tonumber(redis.call('GET', KEYS[2]) or '0'); "
+                            + "if attempts >= tonumber(ARGV[2]) then return -2; end; "
+                            + "local stored = redis.call('GET', KEYS[1]); "
+                            + "if not stored then return -1; end; "
+                            + "if stored == ARGV[1] then "
+                            + "redis.call('DEL', KEYS[1]); "
+                            + "redis.call('DEL', KEYS[2]); "
+                            + "return 1; "
+                            + "end; "
+                            + "local count = redis.call('INCR', KEYS[2]); "
+                            + "if count == 1 then redis.call('EXPIRE', KEYS[2], ARGV[3]); end; "
+                            + "if count >= tonumber(ARGV[2]) then "
+                            + "redis.call('DEL', KEYS[1]); "
+                            + "return -2; "
+                            + "end; "
+                            + "return 0;",
+                    Long.class);
 
-        if (stored == null) {
+    public AuthResponse verifyOtp(VerifyOtpRequest req, HttpServletRequest httpRequest) {
+        String otpKey = AppConstants.REDIS_OTP_PREFIX + req.getPhone();
+        String attemptsKey = AppConstants.REDIS_OTP_ATTEMPTS_PREFIX + req.getPhone();
+
+        Long result = redisTemplate.execute(
+                OTP_VERIFY_SCRIPT,
+                List.of(otpKey, attemptsKey),
+                req.getOtp(),
+                Integer.toString(AppConstants.OTP_MAX_VERIFY_ATTEMPTS),
+                Integer.toString(AppConstants.OTP_VERIFY_LOCKOUT_SECONDS));
+
+        if (result == null || result == -1L) {
             throw AppException.badRequest(
                     "OTP has expired or was never requested. Please request a new one.");
         }
-        if (!stored.equals(req.getOtp())) {
+        if (result == 0L) {
             throw AppException.badRequest("Invalid OTP. Please check and try again.");
         }
-        redisTemplate.delete(key);  // Clear OTP after successful verification
+        if (result == -2L) {
+            throw AppException.of(
+                    org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
+                    "OTP_ATTEMPTS_EXCEEDED",
+                    "Too many incorrect OTP attempts. Please request a new OTP later.");
+        }
+        if (result != 1L) {
+            throw AppException.serviceUnavailable("Unable to verify OTP. Please try again.");
+        }
 
         User user = userRepository.findByPhone(req.getPhone())
                 .orElseThrow(() -> AppException.notFound("User not found"));
