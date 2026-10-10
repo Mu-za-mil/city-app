@@ -1,16 +1,12 @@
 package com.cityapp.user.service;
 
-import com.cityapp.common.event.EventPublisher;
-import com.cityapp.common.event.UserRegisteredEvent;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
-import com.cityapp.security.service.JwtService;
 import com.cityapp.user.dto.*;
 import com.cityapp.user.entity.Role;
 import com.cityapp.user.entity.User;
 import com.cityapp.user.mapper.UserMapper;
 import com.cityapp.user.repository.UserRepository;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -18,7 +14,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,20 +39,11 @@ import org.springframework.transaction.annotation.Transactional;
  *   This method is the implementation of that call.
  *   Returns User which implements UserDetails (from Phase 3.3).
  *
- * WHY @Transactional ON register():
- *   Registration involves: duplicate check + save.
- *   If save fails after duplicate check: transaction rolls back cleanly.
- *   Without @Transactional: save failure leaves no partial state
- *   (single operation, so OK without it too).
- *   BUT: as a principle, all write operations should be @Transactional.
- *   Reads: @Transactional(readOnly = true) — tells DB this is read-only,
- *   DB can optimise (no write locks acquired).
- *
  * WHY @Slf4j:
  *   Lombok generates: private static final Logger log = LoggerFactory.getLogger(...)
- *   Lets you write: log.info("User registered: {}", user.getEmail())
+ *   Lets you write: log.info("User profile updated: {}", user.getEmail())
  *   The {} placeholder is evaluated lazily — string concat only if logging is enabled.
- *   Slightly more efficient than: log.info("User registered: " + email)
+ *   Slightly more efficient than: log.info("User profile updated: " + email)
  */
 @Slf4j
 @Service
@@ -66,69 +52,6 @@ public class UserService implements UserDetailsService {
 
     private final UserRepository  userRepository;
     private final UserMapper      userMapper;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
-    private final EventPublisher eventPublisher;
-    // PasswordEncoder is a Spring Security bean defined in SecurityConfig (Phase 4).
-    // We declare the dependency here. Spring will inject it.
-    // This creates a chicken-and-egg situation: UserService needs SecurityConfig.
-    // Resolution: UserService declares the interface (PasswordEncoder),
-    // SecurityConfig provides the implementation (BCryptPasswordEncoder).
-    // Spring resolves dependencies by interface type, not by class.
-
-    // ── Registration ──────────────────────────────────────────────────────────
-
-    @Transactional
-    public UserResponse register(RegisterRequest req) {
-
-        // BUSINESS RULE 1: Email must be unique
-        if (userRepository.existsByEmail(req.getEmail())) {
-            throw AppException.conflict("Email is already registered: " + req.getEmail());
-            // WHY conflict (409) not bad request (400):
-            // 400 = the request itself is malformed
-            // 409 = the request is valid BUT conflicts with existing state
-            // A duplicate email is a valid email — the conflict is with DB state.
-        }
-
-        // BUSINESS RULE 2: Phone must be unique if provided
-        if (req.getPhone() != null && !req.getPhone().isBlank()
-                && userRepository.existsByPhone(req.getPhone())) {
-            throw AppException.conflict("Phone number is already registered");
-        }
-
-        // BUSINESS RULE 3: SUPER_ADMIN role cannot be self-assigned
-        if (req.getRole() == Role.SUPER_ADMIN) {
-            throw AppException.forbidden("SUPER_ADMIN role cannot be self-assigned");
-        }
-
-        // Convert request to entity (MapStruct)
-        User user = userMapper.toEntity(req);
-
-        // Hash the plaintext password BEFORE saving
-        // BCrypt(plaintext, cost=12) → 60-char hash
-        // The hash is mathematically impossible to reverse.
-        // NEVER store plaintext passwords. Ever.
-        user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
-
-        User saved = userRepository.save(user);
-
-        eventPublisher.publishUserRegistered(
-                UserRegisteredEvent.builder()
-                        .eventId(EventPublisher.generateEventId())
-                        .userId(saved.getId())
-                        .email(saved.getEmail())
-                        .name(saved.getName())
-                        .phone(saved.getPhone())
-                        .role(saved.getRole())
-                        .registeredAt(saved.getCreatedAt())
-                        .build());
-
-        log.info("User registered: id={} email={} role={}",
-                saved.getId(), saved.getEmail(), saved.getRole());
-
-        return userMapper.toResponse(saved);
-    }
-
 
     // ── Profile Operations ────────────────────────────────────────────────────
 
@@ -218,42 +141,4 @@ public class UserService implements UserDetailsService {
                 .orElseThrow(() -> AppException.notFound("User not found: " + userId));
     }
 
-    private String extractDeviceInfo(HttpServletRequest request) {
-        String ua = request.getHeader("User-Agent");
-        if (ua == null) return "Unknown Device";
-        if (ua.contains("iPhone")) return "iPhone";
-        if (ua.contains("Android")) return "Android";
-        if (ua.contains("iPad")) return "iPad";
-        if (ua.contains("Windows")) return "Windows PC";
-        if (ua.contains("Macintosh")) return "Mac";
-        return "Browser";
-    }
-
-    private String extractClientIp(HttpServletRequest request) {
-        // Only trust X-Forwarded-For from private/loopback IPs (our load balancer)
-        // Public IPs sending XFF = spoofing attempt
-        String remoteAddr = request.getRemoteAddr();
-        if (isPrivateOrLoopback(remoteAddr)) {
-            String xff = request.getHeader("X-Forwarded-For");
-            if (xff != null && !xff.isBlank()) {
-                // Take the rightmost non-private IP (the real client)
-                String[] ips = xff.split(",");
-                for (int i = ips.length - 1; i >= 0; i--) {
-                    String ip = ips[i].trim();
-                    if (!isPrivateOrLoopback(ip)) return ip;
-                }
-                return ips[0].trim();
-            }
-        }
-        return remoteAddr;
-    }
-
-    private boolean isPrivateOrLoopback(String ip) {
-        return ip != null && (
-                ip.startsWith("127.") || ip.startsWith("10.") ||
-                        ip.startsWith("172.1") || ip.startsWith("172.2") ||
-                        ip.startsWith("172.3") || ip.startsWith("192.168.") ||
-                        ip.equals("::1") || ip.equals("0:0:0:0:0:0:0:1")
-        );
-    }
 }

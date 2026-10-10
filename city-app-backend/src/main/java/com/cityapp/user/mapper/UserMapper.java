@@ -1,10 +1,8 @@
 package com.cityapp.user.mapper;
 
-import com.cityapp.user.dto.RegisterRequest;
 import com.cityapp.user.dto.UserResponse;
 import com.cityapp.user.entity.User;
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
 
 /**
  * MapStruct mapper for User ↔ DTO conversion.
@@ -53,26 +51,4 @@ public interface UserMapper {
      */
     UserResponse toResponse(User user);
 
-    /**
-     * Convert RegisterRequest → User entity.
-     * Called in UserService.register() to create a new User.
-     *
-     * @Mapping ignore for passwordHash:
-     *   RegisterRequest.password is plaintext.
-     *   We BCrypt-hash it in the service before setting it.
-     *   We don't want MapStruct trying to map password → passwordHash.
-     *   (It can't anyway — different names — but be explicit.)
-     *
-     * @Mapping ignore for id, createdAt, updatedAt:
-     *   These are set by the database on INSERT.
-     *   MapStruct should not try to set them from the request.
-     */
-    @Mapping(target = "passwordHash",      ignore = true)
-    @Mapping(target = "id",                ignore = true)
-    @Mapping(target = "createdAt",         ignore = true)
-    @Mapping(target = "updatedAt",         ignore = true)
-    @Mapping(target = "enabled",           ignore = true)
-    @Mapping(target = "accountNonLocked",  ignore = true)
-    @Mapping(target = "profileImageUrl",   ignore = true)
-    User toEntity(RegisterRequest request);
 }
