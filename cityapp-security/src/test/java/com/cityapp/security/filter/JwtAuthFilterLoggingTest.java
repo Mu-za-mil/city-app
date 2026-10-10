@@ -1,5 +1,6 @@
 package com.cityapp.security.filter;
 
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
@@ -29,10 +30,13 @@ class JwtAuthFilterLoggingTest {
     private final JwtAuthFilter filter = new JwtAuthFilter(jwtService, userDetailsService);
     private final Logger logger = (Logger) LoggerFactory.getLogger(JwtAuthFilter.class);
     private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    private Level previousLevel;
 
     @BeforeEach
     void attachAppender() {
         SecurityContextHolder.clearContext();
+        previousLevel = logger.getLevel();
+        logger.setLevel(Level.DEBUG);
         appender.start();
         logger.addAppender(appender);
     }
@@ -41,6 +45,7 @@ class JwtAuthFilterLoggingTest {
     void cleanup() {
         logger.detachAppender(appender);
         appender.stop();
+        logger.setLevel(previousLevel);
         SecurityContextHolder.clearContext();
     }
 
