@@ -35,4 +35,21 @@ class ActuatorExposureConfigTest {
                 .map(String::trim)
                 .anyMatch("env"::equals));
     }
+
+    @Test
+    void exposesOnlyHealthInfoAndPrometheusEndpoints() throws IOException {
+        PropertySource<?> properties = new YamlPropertySourceLoader()
+                .load("application", new ClassPathResource("application.yml"))
+                .get(0);
+
+        String exposedEndpoints = (String) properties.getProperty(
+                "management.endpoints.web.exposure.include");
+
+        assertNotNull(exposedEndpoints);
+        assertEquals(java.util.List.of("health", "info", "prometheus"),
+                java.util.Arrays.stream(exposedEndpoints.split(","))
+                        .map(String::trim)
+                        .toList());
+    }
 }
+
