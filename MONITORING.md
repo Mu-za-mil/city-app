@@ -1,17 +1,17 @@
-# Local monitoring setup
+# Local monitoring and environment configuration
 
-Grafana is available only when the Compose `monitoring` profile is enabled. Its administrator password must be provided through the local environment and is not stored in the Compose file.
+All values injected into containers by `docker-compose.yml` are configured through environment variables. For local development, copy `.env.example` to `.env` and review the settings before starting services.
 
 ## First-time setup
 
 1. Copy `.env.example` to `.env`.
-2. Replace the JWT/database placeholders with unique local secrets.
-3. Set `GRAFANA_ADMIN_PASSWORD` to a strong, unique random password. Do not reuse a production credential.
-4. Keep `.env` out of version control; the repository ignores it.
-5. Start monitoring with `docker compose --profile monitoring up -d`.
+2. Replace the JWT, database and Grafana password placeholders with unique local secrets.
+3. Keep `.env` out of version control; the repository ignores it.
+4. Validate the configuration with `docker compose config --quiet`.
+5. Start the desired profile, for example `docker compose --profile monitoring up -d`.
 
-If `GRAFANA_ADMIN_PASSWORD` is missing or empty, Compose intentionally fails rather than starting Grafana with a known default password. Compose may require this variable even when another profile is selected because interpolation is evaluated across the Compose model; set it in your local `.env` before running Compose commands.
+Compose requires the referenced variables to be present. If a variable is missing, configuration fails with an explanatory message rather than silently using an inline value. Optional third-party integration credentials may remain empty when those integrations are not configured.
 
 ## Production note
 
-This Compose configuration is for local development. For shared or production deployments, inject the administrator password from the deployment platform's secret manager, rotate credentials through the approved process, restrict Grafana network access, and do not use `.env.example` placeholder values.
+This Compose configuration is for local development. The Kafka replication factor of 1, plaintext listeners and automatic topic creation are local-development settings, not a production Kafka design. For shared or production deployments, use the deployment platform's secret manager, review network exposure and use environment-specific Kafka/security configuration. Do not use `.env.example` placeholder values in a deployed environment.
