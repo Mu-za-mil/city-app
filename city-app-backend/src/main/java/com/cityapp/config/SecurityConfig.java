@@ -68,8 +68,6 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/v1/auth/register",
-                                "/api/v1/auth/login",
                                 "/api/v1/webhooks/**",
                                 "/api/v1/payments/webhooks/**",
                                 "/ws/**"
