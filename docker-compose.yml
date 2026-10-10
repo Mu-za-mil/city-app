@@ -44,7 +44,7 @@ services:
       - EUREKA_HOST=${EUREKA_HOST:?Set EUREKA_HOST in .env}
       - REDIS_HOST=${GATEWAY_REDIS_HOST:?Set GATEWAY_REDIS_HOST in .env}
       - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
       - LOGGING_LEVEL_COM_CITYAPP_GATEWAY=${LOGGING_LEVEL_COM_CITYAPP_GATEWAY:?Set LOGGING_LEVEL_COM_CITYAPP_GATEWAY in .env}
       - LOGGING_LEVEL_IO_JSONWEBTOKEN=${LOGGING_LEVEL_IO_JSONWEBTOKEN:?Set LOGGING_LEVEL_IO_JSONWEBTOKEN in .env}
     profiles:
@@ -63,12 +63,12 @@ services:
       dockerfile: Dockerfile
     container_name: cityapp-auth
     environment:
-      - EUREKA_HOST=eureka-server
+      - EUREKA_HOST=${EUREKA_HOST:?Set EUREKA_HOST in .env}
       - DB_URL=${AUTH_DB_URL:?Set AUTH_DB_URL in .env}
       - REDIS_HOST=${REDIS_HOST:?Set REDIS_HOST in .env}
       - KAFKA_BROKERS=${KAFKA_BROKERS:?Set KAFKA_BROKERS in .env}
       - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
       - DB_PASSWORD=${DB_PASSWORD}
     profiles:
       - core
@@ -91,13 +91,13 @@ services:
       dockerfile: Dockerfile
     container_name: cityapp-notification
     environment:
-      - EUREKA_HOST=eureka-server
-      - DB_URL=jdbc:postgresql://postgres:5432/cityapp
-      - REDIS_HOST=redis
-      - KAFKA_BROKERS=kafka:9092
+      - EUREKA_HOST=${EUREKA_HOST:?Set EUREKA_HOST in .env}
+      - DB_URL=${AUTH_DB_URL:?Set AUTH_DB_URL in .env}
+      - REDIS_HOST=${REDIS_HOST:?Set REDIS_HOST in .env}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:?Set KAFKA_BROKERS in .env}
       - MAIL_HOST=${MAIL_HOST:?Set MAIL_HOST in .env}
       - FIREBASE_CREDENTIALS_PATH=${APP_FCM_CREDENTIALS_PATH:-}
-      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
       - DB_PASSWORD=${DB_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
 
@@ -128,12 +128,12 @@ services:
       dockerfile: Dockerfile
     container_name: cityapp-main
     environment:
-      - EUREKA_HOST=eureka-server
+      - EUREKA_HOST=${EUREKA_HOST:?Set EUREKA_HOST in .env}
       - SPRING_DATASOURCE_URL=${MAIN_DATASOURCE_URL:?Set MAIN_DATASOURCE_URL in .env}
-      - REDIS_HOST=redis
+      - REDIS_HOST=${REDIS_HOST:?Set REDIS_HOST in .env}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?Set KAFKA_BOOTSTRAP_SERVERS in .env}
       - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
       - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
       - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
       - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
