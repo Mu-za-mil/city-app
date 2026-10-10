@@ -248,7 +248,7 @@ services:
       - cityapp-network
 
   mailhog:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:v1.0.1
     container_name: cityapp-mailhog
     ports:
       - "1025:1025"
@@ -259,7 +259,7 @@ services:
       - cityapp-network
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: provectuslabs/kafka-ui:v0.7.2
     container_name: cityapp-kafka-ui
     depends_on:
       - kafka
@@ -274,7 +274,7 @@ services:
       - cityapp-network
 
   zipkin:
-    image: openzipkin/zipkin:latest
+    image: openzipkin/zipkin:3.6.1
     container_name: cityapp-zipkin
     ports:
       - "9411:9411"
@@ -284,7 +284,7 @@ services:
       - cityapp-network
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.15.0
     container_name: cityapp-prometheus
     ports:
       - "9090:9090"
@@ -298,7 +298,7 @@ services:
       - cityapp-network
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.1.5
     container_name: cityapp-grafana
     ports:
       - "3000:3000"
@@ -342,7 +342,7 @@ services:
       - cityapp-network
 
   alertmanager:
-    image: prom/alertmanager:latest
+    image: prom/alertmanager:v0.34.1
     container_name: cityapp-alertmanager
     ports:
       - "9093:9093"
