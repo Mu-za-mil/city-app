@@ -100,7 +100,6 @@ services:
       - SPRING_PROFILES_ACTIVE=dev
       - DB_PASSWORD=${DB_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
-      - LOGGING_LEVEL_COM_CITYAPP_SECURITY_FILTER_JWTAUTHFILTER=DEBUG
 
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8083/actuator/health | grep -q 'UP'"]
@@ -208,7 +207,7 @@ services:
     profiles:
       - infra
     healthcheck:
-      test: [ "CMD-SHELL", "cub zk-ready localhost:2181 10" ]
+      test: ["CMD-SHELL", "cub zk-ready localhost:2181 10"]
       interval: 10s
       timeout: 15s
       retries: 12
@@ -238,8 +237,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server",
-             "localhost:9092", "--list"]
+      test: ["CMD-SHELL", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 10s
       timeout: 10s
       retries: 12
