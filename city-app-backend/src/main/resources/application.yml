@@ -74,6 +74,13 @@ spring:
         # WHY true: include the message type in Kafka headers so consumers
         # can deserialize JSON into the correct event class.
         acks: all
+        enable.idempotence: true
+        retries: 2147483647
+        max.in.flight.requests.per.connection: 5
+        request.timeout.ms: 30000
+        delivery.timeout.ms: 120000
+        # Idempotence + retries protect against duplicate writes during retriable failures.
+        # This does not make a single-broker local cluster highly available.
         # WHY all: wait for ALL in-sync replicas to acknowledge.
         # Without this: leader broker confirms → immediately crashes
         # before replicating → message permanently lost.
