@@ -74,19 +74,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
-            log.debug("JWT subject extracted: {}", username);
-
             UserDetails userDetails;
             try {
                 userDetails = userDetailsService.loadUserByUsername(username);
             } catch (org.springframework.security.core.userdetails.UsernameNotFoundException e) {
-                log.debug("JWT authentication failed: user not found for subject={}", username);
+                log.debug("JWT authentication failed: user not found");
                 filterChain.doFilter(request, response);
                 return;
             }
 
             if (!jwtService.isValid(token, userDetails)) {
-                log.debug("JWT authentication failed: token rejected for subject={}", username);
+                log.debug("JWT authentication failed: token rejected");
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -102,14 +100,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            log.debug("JWT authentication established for user={}", username);
+            log.debug("JWT authentication established");
 
         } catch (io.jsonwebtoken.ExpiredJwtException e) {
             log.debug("JWT authentication failed: token expired");
         } catch (io.jsonwebtoken.JwtException e) {
-            log.debug("JWT authentication failed: invalid JWT ({})", e.getMessage());
+            log.debug("JWT authentication failed: invalid JWT; exceptionType={}",
+                    e.getClass().getSimpleName());
         } catch (Exception e) {
-            log.warn("JWT authentication failed unexpectedly: {}", e.getMessage());
+            log.warn("JWT authentication failed unexpectedly; exceptionType={}",
+                    e.getClass().getSimpleName());
         }
 
         filterChain.doFilter(request, response);
