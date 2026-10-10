@@ -345,7 +345,7 @@ management:
     endpoints:
       web:
         exposure:
-          include: health,info,prometheus,metrics,circuitbreakers
+          include: health,info,prometheus
     endpoint:
       health:
         show-details: never
