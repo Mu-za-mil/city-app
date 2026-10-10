@@ -22,7 +22,7 @@ services:
     ports:
       - "8761:8761"
     environment:
-      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
     profiles:
       - core
     networks:
@@ -41,12 +41,12 @@ services:
     ports:
       - "8085:8000"
     environment:
-      - EUREKA_HOST=eureka-server
-      - REDIS_HOST=cityapp-redis
-      - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=dev
-      - LOGGING_LEVEL_COM_CITYAPP_GATEWAY=DEBUG
-      - LOGGING_LEVEL_IO_JSONWEBTOKEN=DEBUG
+      - EUREKA_HOST=${EUREKA_HOST:?Set EUREKA_HOST in .env}
+      - REDIS_HOST=${GATEWAY_REDIS_HOST:?Set GATEWAY_REDIS_HOST in .env}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
+      - LOGGING_LEVEL_COM_CITYAPP_GATEWAY=${LOGGING_LEVEL_COM_CITYAPP_GATEWAY:?Set LOGGING_LEVEL_COM_CITYAPP_GATEWAY in .env}
+      - LOGGING_LEVEL_IO_JSONWEBTOKEN=${LOGGING_LEVEL_IO_JSONWEBTOKEN:?Set LOGGING_LEVEL_IO_JSONWEBTOKEN in .env}
     profiles:
       - core
     depends_on:
@@ -63,12 +63,12 @@ services:
       dockerfile: Dockerfile
     container_name: cityapp-auth
     environment:
-      - EUREKA_HOST=eureka-server
-      - DB_URL=jdbc:postgresql://postgres:5432/cityapp
-      - REDIS_HOST=redis
-      - KAFKA_BROKERS=kafka:9092
-      - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=dev
+      - EUREKA_HOST=${EUREKA_HOST:?Set EUREKA_HOST in .env}
+      - DB_URL=${AUTH_DB_URL:?Set AUTH_DB_URL in .env}
+      - REDIS_HOST=${REDIS_HOST:?Set REDIS_HOST in .env}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:?Set KAFKA_BROKERS in .env}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
       - DB_PASSWORD=${DB_PASSWORD}
     profiles:
       - core
@@ -91,15 +91,15 @@ services:
       dockerfile: Dockerfile
     container_name: cityapp-notification
     environment:
-      - EUREKA_HOST=eureka-server
-      - DB_URL=jdbc:postgresql://postgres:5432/cityapp
-      - REDIS_HOST=redis
-      - KAFKA_BROKERS=kafka:9092
-      - MAIL_HOST=mailhog
+      - EUREKA_HOST=${EUREKA_HOST:?Set EUREKA_HOST in .env}
+      - DB_URL=${AUTH_DB_URL:?Set AUTH_DB_URL in .env}
+      - REDIS_HOST=${REDIS_HOST:?Set REDIS_HOST in .env}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:?Set KAFKA_BROKERS in .env}
+      - MAIL_HOST=${MAIL_HOST:?Set MAIL_HOST in .env}
       - FIREBASE_CREDENTIALS_PATH=${APP_FCM_CREDENTIALS_PATH:-}
-      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
       - DB_PASSWORD=${DB_PASSWORD}
-      - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
 
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8083/actuator/health | grep -q 'UP'"]
@@ -128,18 +128,18 @@ services:
       dockerfile: Dockerfile
     container_name: cityapp-main
     environment:
-      - EUREKA_HOST=eureka-server
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cityapp
-      - REDIS_HOST=redis
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - JWT_SECRET=${JWT_SECRET}
-      - SPRING_PROFILES_ACTIVE=dev
-      - DB_PASSWORD=${DB_PASSWORD:-cityapp_password}
-      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
-      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
-      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
-      - LOGGING_LEVEL_COM_CITYAPP=DEBUG
-      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY=DEBUG
+      - EUREKA_HOST=${EUREKA_HOST:?Set EUREKA_HOST in .env}
+      - SPRING_DATASOURCE_URL=${MAIN_DATASOURCE_URL:?Set MAIN_DATASOURCE_URL in .env}
+      - REDIS_HOST=${REDIS_HOST:?Set REDIS_HOST in .env}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?Set KAFKA_BOOTSTRAP_SERVERS in .env}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?Set SPRING_PROFILES_ACTIVE in .env}
+      - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:-}
+      - LOGGING_LEVEL_COM_CITYAPP=${LOGGING_LEVEL_COM_CITYAPP:?Set LOGGING_LEVEL_COM_CITYAPP in .env}
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY=${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY:?Set LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY in .env}
     profiles:
       - core
     depends_on:
@@ -159,9 +159,9 @@ services:
     image: postgis/postgis:16-3.4
     container_name: cityapp-postgres
     environment:
-      POSTGRES_DB:       cityapp
-      POSTGRES_USER:     cityapp
-      POSTGRES_PASSWORD: cityapp_password
+      POSTGRES_DB:       ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER:     ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     ports:
       - "5433:5432"
     profiles:
@@ -200,8 +200,8 @@ services:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: cityapp-zookeeper
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT:?Set ZOOKEEPER_CLIENT_PORT in .env}
+      ZOOKEEPER_TICK_TIME: ${ZOOKEEPER_TICK_TIME:?Set ZOOKEEPER_TICK_TIME in .env}
     ports:
       - "2181:2181"
     profiles:
@@ -228,14 +228,14 @@ services:
     profiles:
       - infra
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID:?Set KAFKA_BROKER_ID in .env}
+      KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT:?Set KAFKA_ZOOKEEPER_CONNECT in .env}
+      KAFKA_LISTENERS: ${KAFKA_LISTENERS:?Set KAFKA_LISTENERS in .env}
+      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS:?Set KAFKA_ADVERTISED_LISTENERS in .env}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:?Set KAFKA_LISTENER_SECURITY_PROTOCOL_MAP in .env}
+      KAFKA_INTER_BROKER_LISTENER_NAME: ${KAFKA_INTER_BROKER_LISTENER_NAME:?Set KAFKA_INTER_BROKER_LISTENER_NAME in .env}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR:?Set KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR in .env}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "${KAFKA_AUTO_CREATE_TOPICS_ENABLE:?Set KAFKA_AUTO_CREATE_TOPICS_ENABLE in .env}"
     healthcheck:
       test: ["CMD", "kafka-topics", "--bootstrap-server",
              "localhost:9092", "--list"]
@@ -268,8 +268,8 @@ services:
     profiles:
       - tools
     environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_NAME: ${KAFKA_CLUSTERS_0_NAME:?Set KAFKA_CLUSTERS_0_NAME in .env}
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: ${KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS:?Set KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS in .env}
     networks:
       - cityapp-network
 
@@ -305,8 +305,9 @@ services:
     profiles:
       - monitoring
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Set GRAFANA_ADMIN_USER in .env}
+      # Never use a committed/default password. Configure this in the untracked .env file.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in your local .env before starting the monitoring profile}
     volumes:
       - grafana_data:/var/lib/grafana
     networks:

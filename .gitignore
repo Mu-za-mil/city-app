@@ -32,6 +32,7 @@ build/
 !**/src/test/**/build/
 
 # Secrets (never commit)
+!.env.example
 application-prod.yml
 *.env
 .env*
