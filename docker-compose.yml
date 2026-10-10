@@ -305,8 +305,9 @@ services:
     profiles:
       - monitoring
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      # Never use a committed/default password. Configure this in the untracked .env file.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in your local .env before starting the monitoring profile}
     volumes:
       - grafana_data:/var/lib/grafana
     networks:
