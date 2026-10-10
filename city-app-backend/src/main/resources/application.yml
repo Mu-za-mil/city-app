@@ -345,10 +345,10 @@ management:
     endpoints:
       web:
         exposure:
-          include: health,info,prometheus,metrics,env,circuitbreakers
+          include: health,info,prometheus,metrics,circuitbreakers
     endpoint:
       health:
-        show-details: always
+        show-details: never
         probes:
           enabled: true
           # WHY probes: Kubernetes calls /actuator/health/liveness and /readiness
