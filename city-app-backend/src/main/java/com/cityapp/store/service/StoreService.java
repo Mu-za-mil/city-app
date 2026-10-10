@@ -335,17 +335,21 @@ public class StoreService {
                 });
     }
 
-    private boolean isWithinHours(Store store, LocalTime now) {
-        LocalTime open  = store.getOpeningTime();
+    boolean isWithinHours(Store store, LocalTime now) {
+        LocalTime open = store.getOpeningTime();
         LocalTime close = store.getClosingTime();
-        if (open == null || close == null) return false;
-
-        if (open.isBefore(close)) {
-            return now.isAfter(open) && now.isBefore(close);
-        } else {
-            // Overnight: e.g. 22:00 → 02:00
-            return now.isAfter(open) || now.isBefore(close);
+        if (open == null || close == null || open.equals(close)) {
+            return false;
         }
+
+        // Opening time is inclusive; closing time is exclusive.
+        // For example, 09:00–18:00 is open from 09:00 up to (but not including) 18:00.
+        if (open.isBefore(close)) {
+            return !now.isBefore(open) && now.isBefore(close);
+        }
+
+        // Overnight hours, e.g. 22:00–02:00: open from 22:00 until 02:00.
+        return !now.isBefore(open) || now.isBefore(close);
     }
 
     /**
