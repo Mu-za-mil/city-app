@@ -73,7 +73,9 @@ public class JwtService {
 
             return true;
         } catch (JwtException | NullPointerException e) {
-            log.debug("JWT validation failed: {}", e.getMessage());
+            // Parser messages can contain attacker-controlled input. Log only the exception type.
+            log.debug("JWT validation failed; exceptionType={}",
+                    e.getClass().getSimpleName());
             return false;
         }
     }

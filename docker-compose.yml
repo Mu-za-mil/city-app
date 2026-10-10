@@ -100,7 +100,6 @@ services:
       - SPRING_PROFILES_ACTIVE=dev
       - DB_PASSWORD=${DB_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
-      - LOGGING_LEVEL_COM_CITYAPP_SECURITY_FILTER_JWTAUTHFILTER=DEBUG
 
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8083/actuator/health | grep -q 'UP'"]
