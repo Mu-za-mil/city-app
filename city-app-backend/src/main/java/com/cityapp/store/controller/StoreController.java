@@ -2,6 +2,7 @@ package com.cityapp.store.controller;
 
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
+import com.cityapp.common.pagination.PaginationUtils;
 import com.cityapp.store.dto.CreateStoreRequest;
 import com.cityapp.store.dto.StoreResponse;
 import com.cityapp.store.service.StoreService;
@@ -72,7 +73,7 @@ public class StoreController {
             @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 storeService.getMyStores(seller,
-                        PageRequest.of(page, size,
+                        PaginationUtils.of(page, size,
                                 Sort.by("createdAt").descending()))));
     }
 
