@@ -31,7 +31,7 @@ class StoreServiceManualOverrideTest {
 
     @Test
     void schedulerDoesNotReopenStoreAfterSellerManuallyClosesItDuringBusinessHours() {
-        Store store = storeWithHours(true, false);
+        Store store = storeWithHours(false, false);
 
         boolean changed = storeService.reconcileOpenState(store, LocalTime.of(12, 0));
 
