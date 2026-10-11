@@ -2,6 +2,11 @@ package com.cityapp.order.dto;
 
 import com.cityapp.order.entity.OrderType;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -12,11 +17,24 @@ import java.util.Map;
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class PlaceOrderRequest {
 
-    private Long          storeId;
-    private OrderType     orderType;
-    private String        deliveryAddress;
-    private String        notes;
-    private String        idempotencyKey;
+    @NotNull(message = "Store ID is required")
+    @Positive(message = "Store ID must be positive")
+    private Long storeId;
+
+    @NotNull(message = "Order type is required")
+    private OrderType orderType;
+
+    @Size(max = 2000, message = "Delivery address must be at most 2000 characters")
+    private String deliveryAddress;
+
+    @Size(max = 1000, message = "Notes must be at most 1000 characters")
+    private String notes;
+
+    @Size(max = 128, message = "Idempotency key must be at most 128 characters")
+    private String idempotencyKey;
+
+    @NotEmpty(message = "At least one order item is required")
+    @Valid
     private List<OrderItemRequest> items;
 
     /**
