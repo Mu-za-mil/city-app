@@ -1,13 +1,11 @@
 package com.cityapp.auth.controller;
 
 import com.cityapp.auth.dto.UserResponse;
-import com.cityapp.auth.entity.User;
 import com.cityapp.auth.service.UserService;
 import com.cityapp.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -26,8 +24,7 @@ public class AccountStatusAdminController {
     @PostMapping("/{userId}/suspend")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<ApiResponse<UserResponse>> suspend(
-            @PathVariable Long userId,
-            @AuthenticationPrincipal User administrator) {
+            @PathVariable Long userId) {
         UserResponse response = userService.suspendUser(userId);
         return ResponseEntity.ok(ApiResponse.ok(response, "User suspended successfully"));
     }
