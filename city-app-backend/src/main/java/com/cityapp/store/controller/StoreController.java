@@ -122,7 +122,7 @@ public class StoreController {
             @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 storeService.getPendingApprovals(
-                        PageRequest.of(page, size,
+                        PaginationUtils.of(page, size,
                                 Sort.by("createdAt").ascending()))));
     }
 }
