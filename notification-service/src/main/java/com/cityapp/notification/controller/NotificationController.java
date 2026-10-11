@@ -30,8 +30,8 @@ public class NotificationController {
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<NotificationResponse>>> getNotifications(
             @AuthenticationPrincipal(expression = "userId") String userId,
-            @RequestParam(name = "page", defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "page", defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int page,
+            @RequestParam(name = "size", defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size,
             @RequestParam(name = "unreadOnly", defaultValue = "false") boolean unreadOnly) {
 
         Pageable pageable = PaginationUtils.of(page, size,
