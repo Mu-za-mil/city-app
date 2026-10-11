@@ -247,7 +247,9 @@ public class StoreService {
                             "Current status: " + store.getStatus());
         }
 
-        store.setOpen(!store.isOpen());
+        boolean requestedOpen = !store.isOpen();
+        store.setOpen(requestedOpen);
+        store.setManualOpenOverride(requestedOpen);
         Store saved = storeRepository.save(store);
 
         log.info("Store {} toggled: open={} by seller={}",
@@ -325,14 +327,48 @@ public class StoreService {
                         StoreStatus.ACTIVE, Pageable.unpaged())
                 .forEach(store -> {
                     if (store.getOpeningTime() == null) return;
-                    boolean shouldBeOpen = isWithinHours(store, nowIST);
-                    if (store.isOpen() != shouldBeOpen) {
-                        store.setOpen(shouldBeOpen);
+                    if (reconcileOpenState(store, nowIST)) {
                         storeRepository.save(store);
-                        log.debug("Auto-toggled store {}: open={}",
-                                store.getId(), shouldBeOpen);
+                        log.debug("Auto-reconciled store {}: open={}, manualOverride={}",
+                                store.getId(), store.isOpen(), store.getManualOpenOverride());
                     }
                 });
+    }
+
+    /**
+     * Reconciles one store against its schedule.
+     *
+     * A seller's explicit open/close choice wins while it conflicts with the
+     * configured schedule. Once the schedule naturally reaches that chosen
+     * state (for example, a manual early close reaches closing time), the
+     * override is cleared and normal scheduling resumes.
+     *
+     * Package-private to make the schedule/override state machine testable
+     * with a fixed time, without waiting for the real scheduler.
+     *
+     * @return true when the entity changed and should be persisted
+     */
+    boolean reconcileOpenState(Store store, LocalTime now) {
+        boolean shouldBeOpen = isWithinHours(store, now);
+        Boolean manualOverride = store.getManualOpenOverride();
+
+        if (manualOverride != null) {
+            if (manualOverride != shouldBeOpen) {
+                return false; // Respect seller's choice while schedule disagrees.
+            }
+            store.setManualOpenOverride(null); // Schedule caught up; resume automation.
+            if (store.isOpen() != shouldBeOpen) {
+                store.setOpen(shouldBeOpen);
+            }
+            return true;
+        }
+
+        if (store.isOpen() == shouldBeOpen) {
+            return false;
+        }
+
+        store.setOpen(shouldBeOpen);
+        return true;
     }
 
     boolean isWithinHours(Store store, LocalTime now) {
