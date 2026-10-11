@@ -3,7 +3,6 @@ package com.cityapp.notification.controller;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.notification.entity.DeviceToken;
-import com.cityapp.notification.entity.User;
 import com.cityapp.notification.repository.DeviceTokenRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -32,7 +31,7 @@ public class DeviceTokenController {
         deviceTokenRepository.findByToken(req.getToken())
                 .ifPresentOrElse(
                         existing -> {
-                            if (!existing.getUserId().equals(user.getId())) {
+                            if (!existing.getUserId().equals(toDatabaseUserId(userId))) {
                                 throw AppException.forbidden(
                                         "Device token belongs to another user");
                             }
@@ -43,7 +42,7 @@ public class DeviceTokenController {
                         },
                         () -> {
                             DeviceToken token = DeviceToken.builder()
-                                    .userId(user.getId())
+                                    .userId(toDatabaseUserId(userId))
                                     .token(req.getToken())
                                     .platform(req.getPlatform())
                                     .active(true)
@@ -51,7 +50,7 @@ public class DeviceTokenController {
                             deviceTokenRepository.save(token);
 
                             log.info("Device token registered: userId={} platform={}",
-                                    user.getId(), req.getPlatform());
+                                    userId, req.getPlatform());
                         }
                 );
 
@@ -66,7 +65,7 @@ public class DeviceTokenController {
         DeviceToken existing = deviceTokenRepository.findByToken(token)
                 .orElseThrow(() -> AppException.notFound("Device token not found"));
 
-        if (!existing.getUserId().equals(user.getId())) {
+        if (!existing.getUserId().equals(toDatabaseUserId(userId))) {
             throw AppException.forbidden("Cannot remove another user's device token");
         }
 
