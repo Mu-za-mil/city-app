@@ -1,10 +1,10 @@
 package com.cityapp.notification.controller;
 
+import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.notification.dto.NotificationResponse;
 import com.cityapp.notification.service.InAppNotificationService;
-import com.cityapp.notification.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -16,18 +16,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 /**
- * In-App Notification endpoints.
- *
- * The "notification bell" in the mobile app:
- *   - Count badge: unread count on the bell icon
- *   - List: when bell is tapped, show notifications
- *   - Mark read: when notification is tapped
- *   - Mark all read: "clear all" button
- *
- * POLLING STRATEGY:
- *   The unread count updates when the user opens the app (on foreground).
- *   Not real-time. Real-time is handled by push notifications.
- *   In-app API = historical record. Push = instant delivery.
+ * In-app notification endpoints. Controller methods consume the stable
+ * authenticated user ID rather than depending on the notification JPA User
+ * entity. Current numeric database IDs are adapted at the persistence boundary.
  */
 @RestController
 @RequestMapping("/api/v1/notifications")
@@ -38,7 +29,7 @@ public class NotificationController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<NotificationResponse>>> getNotifications(
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal(expression = "userId") String userId,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(name = "unreadOnly", defaultValue = "false") boolean unreadOnly) {
@@ -48,29 +39,37 @@ public class NotificationController {
 
         return ResponseEntity.ok(ApiResponse.ok(
                 notificationService.getNotifications(
-                        user.getId(), unreadOnly, pageable)));
+                        toDatabaseUserId(userId), unreadOnly, pageable)));
     }
 
     @GetMapping("/count")
     public ResponseEntity<ApiResponse<Map<String, Long>>> getUnreadCount(
-            @AuthenticationPrincipal User user) {
-        long count = notificationService.getUnreadCount(user.getId());
+            @AuthenticationPrincipal(expression = "userId") String userId) {
+        long count = notificationService.getUnreadCount(toDatabaseUserId(userId));
         return ResponseEntity.ok(ApiResponse.ok(Map.of("unreadCount", count)));
     }
 
     @PostMapping("/{notificationId}/read")
     public ResponseEntity<ApiResponse<Void>> markRead(
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal(expression = "userId") String userId,
             @PathVariable Long notificationId) {
-        notificationService.markAsRead(notificationId, user.getId());
+        notificationService.markAsRead(notificationId, toDatabaseUserId(userId));
         return ResponseEntity.ok(ApiResponse.ok("Notification marked as read"));
     }
 
     @PostMapping("/read-all")
     public ResponseEntity<ApiResponse<Map<String, Integer>>> markAllRead(
-            @AuthenticationPrincipal User user) {
-        int count = notificationService.markAllAsRead(user.getId());
+            @AuthenticationPrincipal(expression = "userId") String userId) {
+        int count = notificationService.markAllAsRead(toDatabaseUserId(userId));
         return ResponseEntity.ok(ApiResponse.ok(
                 Map.of("markedRead", count)));
+    }
+
+    private static Long toDatabaseUserId(String userId) {
+        try {
+            return Long.valueOf(userId);
+        } catch (NumberFormatException | NullPointerException ex) {
+            throw AppException.forbidden("Authenticated user identity is invalid");
+        }
     }
 }
