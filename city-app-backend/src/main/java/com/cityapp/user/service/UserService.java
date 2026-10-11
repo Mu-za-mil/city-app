@@ -3,7 +3,6 @@ package com.cityapp.user.service;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.PageResponse;
 import com.cityapp.user.dto.*;
-import com.cityapp.user.entity.Role;
 import com.cityapp.user.entity.User;
 import com.cityapp.user.mapper.UserMapper;
 import com.cityapp.user.repository.UserRepository;
@@ -87,27 +86,6 @@ public class UserService implements UserDetailsService {
         return PageResponse.from(users.map(userMapper::toResponse));
         // users.map(): transforms Page<User> → Page<UserResponse>
         // PageResponse.from(): wraps Spring's Page in our stable DTO
-    }
-
-    @Transactional
-    public UserResponse suspendUser(Long userId) {
-        User user = findUserById(userId);
-        if (user.getRole() == Role.SUPER_ADMIN) {
-            throw AppException.forbidden("Cannot suspend a SUPER_ADMIN account");
-        }
-        user.setEnabled(false);
-        User saved = userRepository.save(user);
-        log.info("User suspended: userId={}", userId);
-        return userMapper.toResponse(saved);
-    }
-
-    @Transactional
-    public UserResponse reinstateUser(Long userId) {
-        User user = findUserById(userId);
-        user.setEnabled(true);
-        User saved = userRepository.save(user);
-        log.info("User reinstated: userId={}", userId);
-        return userMapper.toResponse(saved);
     }
 
     // ── Spring Security: UserDetailsService ──────────────────────────────────
