@@ -1,17 +1,18 @@
 # City App service identity contract
 
 **Status:** Proposed contract for the staged service-boundary cleanup  
-**Scope:** Contract only. This document does not change JWTs, authorization behavior, entities, migrations, or database configuration.
+**Status note:** PR #39 introduced the signed `uid` claim while preserving `sub=email`. This staged migration currently decouples notification controller signatures from the JPA entity; the notification filter still loads local `UserDetails` to preserve current account-status checks.
 
 ## Why this contract exists
 
 The gateway and resource services must agree on who the caller is without requiring every service to load a full copy of the `User` persistence entity. A notification record or device token needs a stable owner identifier; it does not need a password hash, profile fields, or a service-local JPA `User`.
 
-Today, the shared JWT contract uses the user's email as `sub`, and the notification service loads a local `User` through `UserDetailsService`. This is a transitional implementation, not the target contract.
+The shared JWT contract uses the user's email as `sub` and now includes a signed `uid` for newly issued tokens from persisted `IdentifiedUserDetails`. Legacy tokens without `uid` remain accepted. The notification filter still loads a local `User` through `UserDetailsService` to preserve current account-status checks; that lookup is transitional, not the target contract.
 
 ## Current behavior (do not assume this is already migrated)
 
-- Access-token `sub` is the user's email.
+- Access-token `sub` is the user's email; newly issued tokens also include the stable `uid` claim.
+- Legacy tokens without `uid` remain accepted during the rollout.
 - The token includes `iat` and `exp` and is signed with HS256.
 - The shared JWT filter loads service-local `UserDetails`, validates the token, and checks enabled/locked/expiry flags.
 - The gateway's `X-User-*` headers are not an identity source for resource services.
@@ -60,15 +61,16 @@ The principal is request-scoped security context data, not a JPA entity. Domain 
 1. Agree on this contract before changing runtime behavior.
 2. Add the stable `uid` claim while retaining email as `sub`. Accept legacy tokens without `uid` during the transition; do not silently reinterpret `sub`. Any future change to the subject format must be a separate, explicitly versioned migration.
 3. Add focused tests for valid/invalid tokens, stable user ID extraction, role handling, account-status/revocation behavior, and forged identity headers.
-4. Change notification controllers and services to consume a minimal principal and stable `userId`, not `notification.entity.User`.
-5. Remove notification's local user lookup/entity only after event consumers, persistence mappings, startup configuration, and tests no longer depend on it.
-6. Handle main-backend identity/profile/status ownership separately.
-7. Perform database/schema separation last, with an explicit data migration and reconciliation plan.
+4. Change notification controllers to consume the stable `userId` property rather than accepting the notification JPA `User` type directly. This PR performs that controller-layer step; current numeric database IDs are converted at the persistence boundary.
+5. Define and implement account-status propagation/revocation and role-claim semantics before removing the notification filter's local user lookup. The current `uid` claim alone is not sufficient to safely eliminate that lookup.
+6. Remove notification's local user lookup/entity only after event consumers, persistence mappings, startup configuration, and tests no longer depend on it.
+7. Handle main-backend identity/profile/status ownership separately.
+8. Perform database/schema separation last, with an explicit data migration and reconciliation plan.
 
 ## Explicit non-goals for this phase
 
 - No schema or database changes.
-- No changes to the current JWT claim format in this documentation-only step.
+- No JWT claim changes in this notification controller refactor.
 - No trust in gateway identity headers.
 - No deletion of user records or regeneration of user IDs.
 - No removal of main-backend profile or account administration until ownership is migrated and tested.
