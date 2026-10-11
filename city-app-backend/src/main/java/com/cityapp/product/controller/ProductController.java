@@ -8,18 +8,21 @@ import com.cityapp.product.dto.ProductResponse;
 import com.cityapp.product.service.ProductService;
 import com.cityapp.user.entity.User;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
 
 import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/v1/stores/{storeId}/products")
 @RequiredArgsConstructor
+@Validated
 public class ProductController {
 
     private final ProductService productService;
@@ -31,11 +34,16 @@ public class ProductController {
             @PathVariable Long storeId,
             @RequestParam(required = false) String     q,
             @RequestParam(required = false) Long       categoryId,
-            @RequestParam(required = false) BigDecimal minPrice,
-            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) @DecimalMin(value = "0.0", message = "Minimum price cannot be negative") BigDecimal minPrice,
+            @RequestParam(required = false) @DecimalMin(value = "0.0", message = "Maximum price cannot be negative") BigDecimal maxPrice,
             @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int  page,
             @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int  size,
             @RequestParam(defaultValue = "name") String sort) {
+
+        if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+            throw com.cityapp.common.exception.AppException.badRequest(
+                    "Minimum price cannot be greater than maximum price");
+        }
 
         // Build sort from query param
         Sort sortObj = switch (sort) {

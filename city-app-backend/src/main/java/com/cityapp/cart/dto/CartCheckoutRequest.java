@@ -8,13 +8,13 @@ import lombok.Setter;
 @Getter @Setter
 public class CartCheckoutRequest {
 
-    @NotNull(message = "Store ID is required")
+    // Set from the trusted route path by CartController, not from the request body.
     private Long storeId;
 
     @NotNull(message = "Order type is required")
     private OrderType orderType;
 
-    // Required if orderType = DELIVERY
+    // Required if orderType = DELIVERY; conditional requirement is enforced by checkout business validation.
     private String deliveryAddress;
     private Long   savedAddressId;
 

@@ -8,6 +8,7 @@ import lombok.Setter;
 public class AddToCartRequest {
 
     @NotNull(message = "Product ID is required")
+    @Positive(message = "Product ID must be positive")
     private Long productId;
 
     @NotNull(message = "Quantity is required")
