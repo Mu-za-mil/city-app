@@ -271,6 +271,12 @@ public class UserService implements UserDetailsService {
         }
         user.setEnabled(false);
         User saved = userRepository.save(user);
+
+        // A disabled account must not keep valid refresh sessions.
+        // This service joins the current transaction, so a failure to revoke
+        // sessions rolls back the status change rather than leaving partial state.
+        refreshTokenService.revokeAllForUser(userId);
+
         log.info("User suspended: userId={}", userId);
         return userMapper.toResponse(saved);
     }
