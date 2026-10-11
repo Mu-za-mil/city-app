@@ -1,6 +1,7 @@
 package com.cityapp.validation;
 
 import com.cityapp.cart.dto.AddToCartRequest;
+import com.cityapp.cart.dto.CartCheckoutRequest;
 import com.cityapp.order.dto.OrderItemRequest;
 import com.cityapp.order.dto.PlaceOrderRequest;
 import com.cityapp.order.entity.OrderType;
@@ -53,6 +54,16 @@ class RequestDtoValidationTest {
         request.setItems(List.of(new OrderItemRequest(2L, 1)));
 
         assertTrue(validator.validate(request).isEmpty());
+    }
+
+    @Test
+    void checkoutRequiresOrderTypeButDoesNotRequireBodyStoreId() {
+        CartCheckoutRequest request = new CartCheckoutRequest();
+
+        var violations = validator.validate(request);
+
+        assertTrue(violations.stream().noneMatch(v -> v.getPropertyPath().toString().equals("storeId")));
+        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("orderType")));
     }
 
     @Test
