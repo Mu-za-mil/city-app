@@ -26,6 +26,7 @@ import java.io.IOException;
  *       -> extract subject
  *       -> load current UserDetails
  *       -> validate signature, expiry, blacklist, and subject
+ *       -> check current account eligibility
  *       -> populate this service's SecurityContext
  *
  * X-User-* and X-Gateway-Request are deliberately ignored.
@@ -85,22 +86,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             if (!jwtService.isValid(token, userDetails)) {
                 log.debug("JWT authentication failed: token rejected");
-                filterChain.doFilter(request, response);
-                return;
+            } else if (!isAccountEligible(userDetails)) {
+                log.debug("JWT authentication failed: account is not eligible");
+            } else {
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities());
+
+                authentication.setDetails(
+                        new WebAuthenticationDetailsSource().buildDetails(request));
+
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                log.debug("JWT authentication established");
             }
-
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities());
-
-            authentication.setDetails(
-                    new WebAuthenticationDetailsSource().buildDetails(request));
-
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-
-            log.debug("JWT authentication established");
 
         } catch (io.jsonwebtoken.ExpiredJwtException e) {
             log.debug("JWT authentication failed: token expired");
@@ -113,5 +114,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isAccountEligible(UserDetails userDetails) {
+        return userDetails.isEnabled()
+                && userDetails.isAccountNonLocked()
+                && userDetails.isAccountNonExpired()
+                && userDetails.isCredentialsNonExpired();
     }
 }
