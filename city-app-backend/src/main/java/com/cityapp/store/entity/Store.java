@@ -72,9 +72,12 @@ public class Store {
     @Column(nullable = false)
     @Builder.Default
     private boolean open = false;
-    // Operational toggle: seller controls this daily.
-    // Separate from status (admin-controlled).
-    // BOTH must be true for checkout: status=ACTIVE AND open=true.
+    // Current operational state used by browse and checkout checks.
+
+    @Column(name = "manual_open_override")
+    private Boolean manualOpenOverride;
+    // null = follow configured operating hours; true/false = seller's explicit override.
+    // The scheduler clears the override when the configured schedule reaches that state.
 
     // ── Status ────────────────────────────────────────────────────────────────
     @Enumerated(EnumType.STRING)
