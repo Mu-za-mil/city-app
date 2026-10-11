@@ -6,6 +6,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.lang.Nullable;
 
 import java.math.BigDecimal;
+import java.util.Locale;
 
 /**
  * JPA Specifications for dynamic product filtering.
@@ -72,25 +73,24 @@ public class ProductSpecification {
 
     /**
      * Keyword search across name AND description.
-     * Case-insensitive LIKE search.
-     * Returns a no-op specification (cb.conjunction()) when keyword is null or blank.
-     *
-     * LOWER(name) LIKE LOWER('%rice%')
-     *
-     * WHY NOT full-text search here:
-     * JPA Specifications don't natively support PostgreSQL FTS (to_tsvector).
-     * For simple keyword search: LIKE is sufficient and readable.
-     * For advanced FTS: use @Query with nativeQuery=true.
-     * Phase 9 adds Elasticsearch for production-grade search.
+     * Case-insensitive substring search across name and description.
+     * The pg_trgm GIN indexes created by V7 support these contains-patterns.
+     * Wildcard characters from the user are escaped so '%' and '_' are treated
+     * as literal characters, not as extra search operators.
+     * Returns a no-op specification when keyword is null or blank.
      */
     public static Specification<Product> withKeyword(@Nullable String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return (root, query, cb) -> cb.conjunction(); // Always true condition
         }
-        String pattern = "%" + keyword.toLowerCase() + "%";
+        String escapedKeyword = keyword.toLowerCase(Locale.ROOT)
+                .replace("\\\\", "\\\\\\\\")
+                .replace("%", "\\\\%")
+                .replace("_", "\\\\_");
+        String pattern = "%" + escapedKeyword + "%";
         return (root, query, cb) -> cb.or(
-                cb.like(cb.lower(root.get("name")), pattern),
-                cb.like(cb.lower(root.get("description")), pattern)
+                cb.like(cb.lower(root.get("name")), pattern, '\\\\'),
+                cb.like(cb.lower(root.get("description")), pattern, '\\\\')
         );
     }
 
