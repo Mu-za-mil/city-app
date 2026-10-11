@@ -32,8 +32,7 @@ public class AccountStatusAdminController {
     @PostMapping("/{userId}/reinstate")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<ApiResponse<UserResponse>> reinstate(
-            @PathVariable Long userId,
-            @AuthenticationPrincipal User administrator) {
+            @PathVariable Long userId) {
         UserResponse response = userService.reinstateUser(userId);
         return ResponseEntity.ok(ApiResponse.ok(response, "User reinstated successfully"));
     }
