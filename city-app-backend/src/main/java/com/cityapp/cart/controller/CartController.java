@@ -5,9 +5,12 @@ import com.cityapp.cart.service.CartService;
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.user.entity.User;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,6 +18,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/cart")
 @RequiredArgsConstructor
+@Validated
 public class CartController {
 
     private final CartService cartService;
@@ -24,7 +28,7 @@ public class CartController {
     @PostMapping("/{storeId}/items")
     public ResponseEntity<ApiResponse<CartResponse>> addItem(
             @AuthenticationPrincipal User buyer,
-            @PathVariable Long storeId,
+            @PathVariable @Positive(message = "Store ID must be positive") Long storeId,
             @Valid @RequestBody AddToCartRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(
                 cartService.addItem(buyer, storeId, req)));
@@ -33,7 +37,7 @@ public class CartController {
     @GetMapping("/{storeId}")
     public ResponseEntity<ApiResponse<CartResponse>> getCart(
             @AuthenticationPrincipal User buyer,
-            @PathVariable Long storeId) {
+            @PathVariable @Positive(message = "Store ID must be positive") Long storeId) {
         return ResponseEntity.ok(ApiResponse.ok(
                 cartService.getCart(buyer.getId(), storeId)));
     }
@@ -41,9 +45,9 @@ public class CartController {
     @PutMapping("/{storeId}/items/{productId}")
     public ResponseEntity<ApiResponse<CartResponse>> updateQuantity(
             @AuthenticationPrincipal User buyer,
-            @PathVariable Long storeId,
-            @PathVariable Long productId,
-            @RequestParam int quantity) {
+            @PathVariable @Positive(message = "Store ID must be positive") Long storeId,
+            @PathVariable @Positive(message = "Product ID must be positive") Long productId,
+            @RequestParam @Positive(message = "Quantity must be positive") @Max(value = 99, message = "Quantity cannot exceed 99") int quantity) {
         return ResponseEntity.ok(ApiResponse.ok(
                 cartService.updateQuantity(
                         buyer.getId(), storeId, productId, quantity)));
@@ -52,8 +56,8 @@ public class CartController {
     @DeleteMapping("/{storeId}/items/{productId}")
     public ResponseEntity<ApiResponse<CartResponse>> removeItem(
             @AuthenticationPrincipal User buyer,
-            @PathVariable Long storeId,
-            @PathVariable Long productId) {
+            @PathVariable @Positive(message = "Store ID must be positive") Long storeId,
+            @PathVariable @Positive(message = "Product ID must be positive") Long productId) {
         return ResponseEntity.ok(ApiResponse.ok(
                 cartService.removeItem(buyer.getId(), storeId, productId)));
     }
@@ -61,7 +65,7 @@ public class CartController {
     @DeleteMapping("/{storeId}")
     public ResponseEntity<ApiResponse<Void>> clearCart(
             @AuthenticationPrincipal User buyer,
-            @PathVariable Long storeId) {
+            @PathVariable @Positive(message = "Store ID must be positive") Long storeId) {
         cartService.clearCart(buyer.getId(), storeId);
         return ResponseEntity.ok(ApiResponse.ok("Cart cleared"));
     }
@@ -80,7 +84,7 @@ public class CartController {
     @PostMapping("/{storeId}/checkout")
     public ResponseEntity<ApiResponse<?>> checkout(
             @AuthenticationPrincipal User buyer,
-            @PathVariable Long storeId,
+            @PathVariable @Positive(message = "Store ID must be positive") Long storeId,
             @Valid @RequestBody CartCheckoutRequest req) {
         req.setStoreId(storeId);
         return ResponseEntity.ok(ApiResponse.ok(
