@@ -256,6 +256,96 @@ class PaymentServiceTest {
         verify(paymentRepository, never()).save(any());
     }
 
+    @Test
+    void webhook_shouldRejectMissingEventIdBeforePersistingEvent() {
+        String body = capturedPayload("order_rzp_1", "pay_1", 49900);
+
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> paymentService.handleRazorpayWebhook(body, sign(body), " "));
+
+        assertEquals(400, exception.getStatus().value());
+        verifyNoInteractions(webhookEventRepository, paymentRepository);
+    }
+
+    @Test
+    void webhook_shouldRejectCurrencyMismatchWithoutChangingPayment() {
+        String body = """
+                {"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_1","order_id":"order_rzp_1","amount":49900,"currency":"USD","status":"captured"}}}}
+                """;
+        Payment payment = Payment.builder()
+                .id(10L)
+                .amount(new BigDecimal("499.00"))
+                .currency("INR")
+                .method("RAZORPAY")
+                .gatewayOrderId("order_rzp_1")
+                .status(PaymentStatus.PENDING)
+                .build();
+
+        when(webhookEventRepository.insertIfAbsent("evt_currency", "payment.captured"))
+                .thenReturn(1);
+        when(paymentRepository.findByGatewayOrderIdForUpdate("order_rzp_1"))
+                .thenReturn(Optional.of(payment));
+
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> paymentService.handleRazorpayWebhook(body, sign(body), "evt_currency"));
+
+        assertEquals(400, exception.getStatus().value());
+        assertEquals(PaymentStatus.PENDING, payment.getStatus());
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void webhook_shouldMarkPendingPaymentFailedForPaymentFailedEvent() {
+        String body = """
+                {"event":"payment.failed","payload":{"payment":{"entity":{"id":"pay_failed","order_id":"order_rzp_1","amount":49900,"currency":"INR","status":"failed"}}}}
+                """;
+        Payment payment = Payment.builder()
+                .id(10L)
+                .amount(new BigDecimal("499.00"))
+                .currency("INR")
+                .method("RAZORPAY")
+                .gatewayOrderId("order_rzp_1")
+                .status(PaymentStatus.PENDING)
+                .build();
+
+        when(webhookEventRepository.insertIfAbsent("evt_failed", "payment.failed"))
+                .thenReturn(1);
+        when(paymentRepository.findByGatewayOrderIdForUpdate("order_rzp_1"))
+                .thenReturn(Optional.of(payment));
+
+        paymentService.handleRazorpayWebhook(body, sign(body), "evt_failed");
+
+        assertEquals(PaymentStatus.FAILED, payment.getStatus());
+        assertEquals("pay_failed", payment.getGatewayPaymentId());
+        verify(paymentRepository).save(payment);
+    }
+
+    @Test
+    void webhook_shouldNotReviveFailedPaymentWhenLateCaptureArrives() {
+        String body = capturedPayload("order_rzp_1", "pay_late", 49900);
+        Payment payment = Payment.builder()
+                .id(10L)
+                .amount(new BigDecimal("499.00"))
+                .currency("INR")
+                .method("RAZORPAY")
+                .gatewayOrderId("order_rzp_1")
+                .status(PaymentStatus.FAILED)
+                .build();
+
+        when(webhookEventRepository.insertIfAbsent("evt_late_capture", "payment.captured"))
+                .thenReturn(1);
+        when(paymentRepository.findByGatewayOrderIdForUpdate("order_rzp_1"))
+                .thenReturn(Optional.of(payment));
+
+        paymentService.handleRazorpayWebhook(body, sign(body), "evt_late_capture");
+
+        assertEquals(PaymentStatus.FAILED, payment.getStatus());
+        assertNull(payment.getGatewayPaymentId());
+        verify(paymentRepository, never()).save(any());
+    }
+
     private static String capturedPayload(String orderId, String paymentId, long amount) {
         return """ 
                 {"event":"payment.captured","payload":{"payment":{"entity":{"id":"%s","order_id":"%s","amount":%d,"currency":"INR","status":"captured"}}}}
