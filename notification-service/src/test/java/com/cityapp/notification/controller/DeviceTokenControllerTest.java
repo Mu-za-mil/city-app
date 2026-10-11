@@ -2,7 +2,6 @@ package com.cityapp.notification.controller;
 
 import com.cityapp.common.exception.AppException;
 import com.cityapp.notification.entity.DeviceToken;
-import com.cityapp.notification.entity.User;
 import com.cityapp.notification.repository.DeviceTokenRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,7 +26,6 @@ class DeviceTokenControllerTest {
 
     @Test
     void registerToken_shouldRejectTokenOwnedByAnotherUser() {
-        User user = User.builder().id(1L).email("user1@example.com").build();
         DeviceToken existing = DeviceToken.builder()
                 .id(10L)
                 .userId(2L)
@@ -39,12 +37,9 @@ class DeviceTokenControllerTest {
         when(deviceTokenRepository.findByToken("token-b"))
                 .thenReturn(Optional.of(existing));
 
-        DeviceTokenController.RegisterTokenRequest request =
-                request("token-b", "ANDROID");
-
         AppException exception = assertThrows(
                 AppException.class,
-                () -> controller.registerToken(user, request));
+                () -> controller.registerToken("1", request("token-b", "ANDROID")));
 
         assertEquals(403, exception.getStatus().value());
         verify(deviceTokenRepository, never()).save(any());
@@ -52,7 +47,6 @@ class DeviceTokenControllerTest {
 
     @Test
     void registerToken_shouldAllowOwnerAndReactivateToken() {
-        User user = User.builder().id(1L).email("user1@example.com").build();
         DeviceToken existing = DeviceToken.builder()
                 .id(10L)
                 .userId(1L)
@@ -64,7 +58,7 @@ class DeviceTokenControllerTest {
         when(deviceTokenRepository.findByToken("token-a"))
                 .thenReturn(Optional.of(existing));
 
-        controller.registerToken(user, request("token-a", "IOS"));
+        controller.registerToken("1", request("token-a", "IOS"));
 
         assertEquals(true, existing.isActive());
         assertEquals("IOS", existing.getPlatform());
@@ -72,8 +66,30 @@ class DeviceTokenControllerTest {
     }
 
     @Test
+    void registerToken_shouldPersistAuthenticatedUserIdForNewToken() {
+        when(deviceTokenRepository.findByToken("token-new"))
+                .thenReturn(Optional.empty());
+
+        controller.registerToken("123", request("token-new", "WEB"));
+
+        verify(deviceTokenRepository).save(argThat(token ->
+                token.getUserId().equals(123L)
+                        && token.getToken().equals("token-new")
+                        && token.isActive()));
+    }
+
+    @Test
+    void registerToken_shouldRejectMalformedAuthenticatedUserId() {
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> controller.registerToken("not-a-number", request("token-a", "IOS")));
+
+        assertEquals(403, exception.getStatus().value());
+        verifyNoInteractions(deviceTokenRepository);
+    }
+
+    @Test
     void unregisterToken_shouldRejectTokenOwnedByAnotherUser() {
-        User user = User.builder().id(1L).email("user1@example.com").build();
         DeviceToken existing = DeviceToken.builder()
                 .id(10L)
                 .userId(2L)
@@ -87,7 +103,7 @@ class DeviceTokenControllerTest {
 
         AppException exception = assertThrows(
                 AppException.class,
-                () -> controller.unregisterToken(user, "token-b"));
+                () -> controller.unregisterToken("1", "token-b"));
 
         assertEquals(403, exception.getStatus().value());
         verify(deviceTokenRepository, never()).deactivateToken(anyString());
@@ -95,7 +111,6 @@ class DeviceTokenControllerTest {
 
     @Test
     void unregisterToken_shouldDeactivateOwnedToken() {
-        User user = User.builder().id(1L).email("user1@example.com").build();
         DeviceToken existing = DeviceToken.builder()
                 .id(10L)
                 .userId(1L)
@@ -107,21 +122,19 @@ class DeviceTokenControllerTest {
         when(deviceTokenRepository.findByToken("token-a"))
                 .thenReturn(Optional.of(existing));
 
-        controller.unregisterToken(user, "token-a");
+        controller.unregisterToken("1", "token-a");
 
         verify(deviceTokenRepository).deactivateToken("token-a");
     }
 
     @Test
     void unregisterToken_shouldReturnNotFoundForUnknownToken() {
-        User user = User.builder().id(1L).email("user1@example.com").build();
-
         when(deviceTokenRepository.findByToken("missing"))
                 .thenReturn(Optional.empty());
 
         AppException exception = assertThrows(
                 AppException.class,
-                () -> controller.unregisterToken(user, "missing"));
+                () -> controller.unregisterToken("1", "missing"));
 
         assertEquals(404, exception.getStatus().value());
         verify(deviceTokenRepository, never()).deactivateToken(anyString());

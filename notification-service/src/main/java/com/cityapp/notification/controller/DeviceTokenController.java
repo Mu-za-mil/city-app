@@ -3,7 +3,6 @@ package com.cityapp.notification.controller;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.notification.entity.DeviceToken;
-import com.cityapp.notification.entity.User;
 import com.cityapp.notification.repository.DeviceTokenRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -26,13 +25,15 @@ public class DeviceTokenController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> registerToken(
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal(expression = "userId") String userId,
             @Valid @RequestBody RegisterTokenRequest req) {
+
+        Long databaseUserId = toDatabaseUserId(userId);
 
         deviceTokenRepository.findByToken(req.getToken())
                 .ifPresentOrElse(
                         existing -> {
-                            if (!existing.getUserId().equals(user.getId())) {
+                            if (!existing.getUserId().equals(databaseUserId)) {
                                 throw AppException.forbidden(
                                         "Device token belongs to another user");
                             }
@@ -43,7 +44,7 @@ public class DeviceTokenController {
                         },
                         () -> {
                             DeviceToken token = DeviceToken.builder()
-                                    .userId(user.getId())
+                                    .userId(databaseUserId)
                                     .token(req.getToken())
                                     .platform(req.getPlatform())
                                     .active(true)
@@ -51,7 +52,7 @@ public class DeviceTokenController {
                             deviceTokenRepository.save(token);
 
                             log.info("Device token registered: userId={} platform={}",
-                                    user.getId(), req.getPlatform());
+                                    userId, req.getPlatform());
                         }
                 );
 
@@ -60,19 +61,33 @@ public class DeviceTokenController {
 
     @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> unregisterToken(
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal(expression = "userId") String userId,
             @RequestParam(name = "token") String token) {
 
+        Long databaseUserId = toDatabaseUserId(userId);
         DeviceToken existing = deviceTokenRepository.findByToken(token)
                 .orElseThrow(() -> AppException.notFound("Device token not found"));
 
-        if (!existing.getUserId().equals(user.getId())) {
+        if (!existing.getUserId().equals(databaseUserId)) {
             throw AppException.forbidden("Cannot remove another user's device token");
         }
 
         deviceTokenRepository.deactivateToken(token);
 
         return ResponseEntity.ok(ApiResponse.ok("Device token removed"));
+    }
+
+    /**
+     * Notification persistence currently stores numeric user IDs. Keep that
+     * schema detail at the persistence boundary instead of exposing the JPA
+     * User entity to controller methods.
+     */
+    private static Long toDatabaseUserId(String userId) {
+        try {
+            return Long.valueOf(userId);
+        } catch (NumberFormatException | NullPointerException ex) {
+            throw AppException.forbidden("Authenticated user identity is invalid");
+        }
     }
 
     @Getter
