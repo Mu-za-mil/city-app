@@ -2,6 +2,7 @@ package com.cityapp.order.controller;
 
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
+import com.cityapp.common.pagination.PaginationUtils;
 import com.cityapp.order.dto.*;
 import com.cityapp.order.entity.OrderStatus;
 import com.cityapp.order.service.OrderService;
@@ -41,7 +42,7 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.ok(
                 orderService.getMyOrders(
                         buyer.getId(),
-                        PageRequest.of(page, size,
+                        PaginationUtils.of(page, size,
                                 Sort.by("createdAt").descending()))));
     }
 
