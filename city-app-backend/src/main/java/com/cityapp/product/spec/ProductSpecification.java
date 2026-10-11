@@ -83,14 +83,15 @@ public class ProductSpecification {
         if (keyword == null || keyword.isBlank()) {
             return (root, query, cb) -> cb.conjunction(); // Always true condition
         }
+        String escape = Character.toString((char) 92);
         String escapedKeyword = keyword.toLowerCase(Locale.ROOT)
-                .replace("\\\\", "\\\\\\\\")
-                .replace("%", "\\\\%")
-                .replace("_", "\\\\_");
+                .replace(escape, escape + escape)
+                .replace("%", escape + "%")
+                .replace("_", escape + "_");
         String pattern = "%" + escapedKeyword + "%";
         return (root, query, cb) -> cb.or(
-                cb.like(cb.lower(root.get("name")), pattern, '\\\\'),
-                cb.like(cb.lower(root.get("description")), pattern, '\\\\')
+                cb.like(cb.lower(root.get("name")), pattern, (char) 92),
+                cb.like(cb.lower(root.get("description")), pattern, (char) 92)
         );
     }
 
