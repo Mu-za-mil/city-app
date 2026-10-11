@@ -5,6 +5,9 @@ import com.cityapp.user.dto.UpdateProfileRequest;
 import com.cityapp.user.dto.UserResponse;
 import com.cityapp.user.entity.User;
 import com.cityapp.user.service.UserService;
+import com.cityapp.user.service.AuthAccountStatusClient;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final AuthAccountStatusClient authAccountStatusClient;
 
     /**
      * Get the currently authenticated user's profile.
@@ -65,18 +69,20 @@ public class UserController {
     // Layer 1 security: role check.
     // Layer 2 security: service checks additional conditions (can't suspend SUPER_ADMIN).
     public ResponseEntity<ApiResponse<UserResponse>> suspend(
-            @PathVariable Long userId) {
-        return ResponseEntity.ok(ApiResponse.ok(
-                userService.suspendUser(userId),
-                "User suspended successfully"));
+            @PathVariable Long userId,
+            HttpServletRequest request) {
+        UserResponse user = authAccountStatusClient.suspend(
+                userId, request.getHeader(HttpHeaders.AUTHORIZATION));
+        return ResponseEntity.ok(ApiResponse.ok(user, "User suspended successfully"));
     }
 
     @PostMapping("/{userId}/reinstate")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<ApiResponse<UserResponse>> reinstate(
-            @PathVariable Long userId) {
-        return ResponseEntity.ok(ApiResponse.ok(
-                userService.reinstateUser(userId),
-                "User reinstated successfully"));
+            @PathVariable Long userId,
+            HttpServletRequest request) {
+        UserResponse user = authAccountStatusClient.reinstate(
+                userId, request.getHeader(HttpHeaders.AUTHORIZATION));
+        return ResponseEntity.ok(ApiResponse.ok(user, "User reinstated successfully"));
     }
 }
