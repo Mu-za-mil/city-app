@@ -37,8 +37,8 @@ public class OrderController {
     @GetMapping("/my")
     public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> myOrders(
             @AuthenticationPrincipal User buyer,
-            @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int page,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 orderService.getMyOrders(
                         buyer.getId(),
@@ -65,8 +65,8 @@ public class OrderController {
             @AuthenticationPrincipal User seller,
             @PathVariable Long storeId,
             @RequestParam(required = false) OrderStatus status,
-            @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int page,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 orderService.getStoreOrders(
                         storeId, seller.getId(), status,
