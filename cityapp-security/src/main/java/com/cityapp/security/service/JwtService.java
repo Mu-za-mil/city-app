@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
  *
  * JWT contract:
  *   sub = user's email
+ *   uid = stable persisted user ID for newly issued tokens when available (optional on legacy tokens)
  *   iat = issued-at timestamp
  *   exp = expiry timestamp
  *   algorithm = HS256
