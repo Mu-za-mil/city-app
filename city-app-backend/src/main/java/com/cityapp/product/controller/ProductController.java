@@ -2,6 +2,7 @@ package com.cityapp.product.controller;
 
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
+import com.cityapp.common.pagination.PaginationUtils;
 import com.cityapp.product.dto.CreateProductRequest;
 import com.cityapp.product.dto.ProductResponse;
 import com.cityapp.product.service.ProductService;
@@ -44,7 +45,7 @@ public class ProductController {
             case "newest"       -> Sort.by("createdAt").descending();
             default             -> Sort.by("name").ascending();
         };
-        Pageable pageable = PageRequest.of(page, size, sortObj);
+        Pageable pageable = PaginationUtils.of(page, size, sortObj);
 
         return ResponseEntity.ok(ApiResponse.ok(
                 productService.searchProducts(
