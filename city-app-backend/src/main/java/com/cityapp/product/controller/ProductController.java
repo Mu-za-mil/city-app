@@ -27,7 +27,7 @@ public class ProductController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> search(
-            @RequestParam(required = false) Long       storeId,
+            @PathVariable Long storeId,
             @RequestParam(required = false) String     q,
             @RequestParam(required = false) Long       categoryId,
             @RequestParam(required = false) BigDecimal minPrice,
