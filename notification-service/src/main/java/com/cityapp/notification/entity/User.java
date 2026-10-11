@@ -7,7 +7,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
+import com.cityapp.security.principal.IdentifiedUserDetails;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -50,7 +50,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class User implements UserDetails {
+public class User implements IdentifiedUserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -119,6 +119,11 @@ public class User implements UserDetails {
 
     // ── UserDetails Interface Implementation ──────────────────────────────────
     // These methods are called by Spring Security during authentication.
+
+    @Override
+    public String getUserId() {
+        return id == null ? null : id.toString();
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

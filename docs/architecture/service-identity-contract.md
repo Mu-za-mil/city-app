@@ -58,7 +58,7 @@ The principal is request-scoped security context data, not a JPA entity. Domain 
 ## Migration sequence
 
 1. Agree on this contract before changing runtime behavior.
-2. Add a versioned JWT identity representation in the issuer and shared security module. Keep the current email-subject tokens compatible during the transition; do not silently reinterpret existing tokens.
+2. Add the stable `uid` claim while retaining email as `sub`. Accept legacy tokens without `uid` during the transition; do not silently reinterpret `sub`. Any future change to the subject format must be a separate, explicitly versioned migration.
 3. Add focused tests for valid/invalid tokens, stable user ID extraction, role handling, account-status/revocation behavior, and forged identity headers.
 4. Change notification controllers and services to consume a minimal principal and stable `userId`, not `notification.entity.User`.
 5. Remove notification's local user lookup/entity only after event consumers, persistence mappings, startup configuration, and tests no longer depend on it.
