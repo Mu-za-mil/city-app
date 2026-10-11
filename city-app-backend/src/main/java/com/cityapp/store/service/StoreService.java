@@ -95,34 +95,40 @@ public class StoreService {
     /**
      * Find stores within a radius of a GPS point.
      *
-     * INPUT VALIDATION:
-     *   radiusKm clamped to MAX_NEARBY_RADIUS_KM (50km).
-     *   WHY: without clamping, a client sends radiusKm=99999.
-     *   Haversine: scan the entire stores table.
-     *   At 100k stores: 5-second query per request.
-     *   With clamping: query is always within a reasonable geographic area.
-     *
-     * DISTANCE IN RESPONSE:
-     *   The Haversine query computes distance_km for each store.
-     *   We want to include it in the response for the client to display.
-     *   Problem: StoreMapper maps Store entity → StoreResponse.
-     *   distance_km is not on the Store entity — it's a computed column.
-     *   Solution: map entity → response first, then set distanceKm manually.
+     * PostGIS ST_DWithin filters using the stores.location GiST index. The
+     * radius is converted from kilometres to metres because location is a
+     * GEOGRAPHY column. PostGIS orders the matching candidates by distance;
+     * we calculate the response distance only for the bounded result list.
      */
     @Transactional(readOnly = true)
     public List<StoreResponse> findNearby(double lat, double lng, double radiusKm) {
         if (radiusKm <= 0) {
             throw AppException.badRequest("Radius must be greater than 0");
         }
-        double safeRadius = Math.min(radiusKm, AppConstants.MAX_NEARBY_RADIUS_KM);
+        double safeRadiusMeters = Math.min(
+                radiusKm, AppConstants.MAX_NEARBY_RADIUS_KM) * 1000.0;
 
         return storeRepository
-                .findNearby(lat, lng, safeRadius, AppConstants.DEFAULT_NEARBY_LIMIT)
+                .findNearby(lat, lng, safeRadiusMeters, AppConstants.DEFAULT_NEARBY_LIMIT)
                 .stream()
-                .map(storeMapper::toResponse)
+                .map(store -> {
+                    StoreResponse response = storeMapper.toResponse(store);
+                    if (store.getLatitude() != null && store.getLongitude() != null) {
+                        response.setDistanceKm(calculateDistanceKm(
+                                lat, lng, store.getLatitude(), store.getLongitude()));
+                    }
+                    return response;
+                })
                 .toList();
-        // TODO Phase 17: use PostGIS ST_DWithin for O(log N) performance
-        // Current: O(N) Haversine full table scan. Acceptable for < 5000 stores.
+    }
+
+    private double calculateDistanceKm(double lat1, double lng1, double lat2, double lng2) {
+        double latDelta = Math.toRadians(lat2 - lat1);
+        double lngDelta = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(latDelta / 2) * Math.sin(latDelta / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(lngDelta / 2) * Math.sin(lngDelta / 2);
+        return 6371.0088 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     /**

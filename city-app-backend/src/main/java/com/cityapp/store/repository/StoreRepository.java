@@ -54,59 +54,37 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     // Admin: pending approvals
     Page<Store> findByStatusOrderByCreatedAtAsc(StoreStatus status, Pageable pageable);
 
-    // ── Nearby Search (Haversine Formula) ─────────────────────────────────────
+    // ── Nearby Search (PostGIS) ───────────────────────────────────────────────
 
     /**
-     * Find ACTIVE stores within a radius, sorted by distance.
+     * Find open ACTIVE stores within a radius, ordered by geodesic distance.
      *
-     * WHY NATIVE SQL (not JPQL):
-     *   JPQL is object-oriented SQL — it knows about entities and relationships.
-     *   It does NOT support database-specific functions like acos(), cos(), sin().
-     *   These trigonometric functions are PostgreSQL-specific.
-     *   JPQL would fail to translate them.
-     *   nativeQuery = true: sends this SQL directly to PostgreSQL.
-     *
-     * THE HAVERSINE FORMULA:
-     *   distance = 6371 * acos(
-     *     cos(radians(userLat)) * cos(radians(storeLat))
-     *     * cos(radians(storeLng) - radians(userLng))
-     *     + sin(radians(userLat)) * sin(radians(storeLat))
-     *   )
-     *   6371 = Earth's radius in kilometers.
-     *   Result: distance in kilometers between two GPS points.
-     *
-     * PERFORMANCE:
-     *   This is O(N) — scans every row and computes the formula.
-     *   For 100 stores: fast. For 10,000 stores: 500ms. For 100,000: 5 seconds.
-     *   Phase 17 (PostGIS) replaces this with O(log N) spatial index query.
-     *   We document this limitation NOW so nobody is surprised later.
-     *
-     * NOTE: HAVING clause not WHERE because distance is a computed column.
-     *   WHERE runs before SELECT (distance not computed yet).
-     *   HAVING runs after SELECT (distance is now available).
+     * ST_DWithin on the geography column applies the radius in metres and can
+     * use idx_stores_location_gist to narrow the candidate set before sorting.
+     * The partial GiST index predicate (status = 'ACTIVE') matches this query.
+     * ST_Distance is used only for the nearby candidates to order nearest first.
      */
     @Query(value = """
-            SELECT * FROM (
-            SELECT *,
-                (6371 * acos(
-                    cos(radians(:lat)) * cos(radians(latitude))
-                    * cos(radians(longitude) - radians(:lng))
-                    + sin(radians(:lat)) * sin(radians(latitude))
-                )) AS distance_km
-            FROM stores
-            WHERE status = 'ACTIVE'
-                AND open = true
-                AND latitude IS NOT NULL
-                AND longitude IS NOT NULL
-        ) AS subquery
-        WHERE distance_km <= :radiusKm
-        ORDER BY distance_km ASC
-        LIMIT :limit
-        """, nativeQuery = true)
-    List<Store> findNearby(@Param("lat")      double lat,
-                           @Param("lng")      double lng,
-                           @Param("radiusKm") double radiusKm,
-                           @Param("limit")    int    limit);
+            SELECT s.*
+            FROM stores s
+            WHERE s.status = 'ACTIVE'
+              AND s.open = true
+              AND s.location IS NOT NULL
+              AND ST_DWithin(
+                    s.location,
+                    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                    :radiusMeters
+              )
+            ORDER BY ST_Distance(
+                s.location,
+                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
+            ) ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<Store> findNearby(@Param("lat") double lat,
+                           @Param("lng") double lng,
+                           @Param("radiusMeters") double radiusMeters,
+                           @Param("limit") int limit);
 
     /**
      * Find stores within a bounding box (for map pan/zoom in mobile app).
