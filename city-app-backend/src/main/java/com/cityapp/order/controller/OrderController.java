@@ -2,6 +2,7 @@ package com.cityapp.order.controller;
 
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
+import com.cityapp.common.pagination.PaginationUtils;
 import com.cityapp.order.dto.*;
 import com.cityapp.order.entity.OrderStatus;
 import com.cityapp.order.service.OrderService;
@@ -36,12 +37,12 @@ public class OrderController {
     @GetMapping("/my")
     public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> myOrders(
             @AuthenticationPrincipal User buyer,
-            @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int page,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 orderService.getMyOrders(
                         buyer.getId(),
-                        PageRequest.of(page, size,
+                        PaginationUtils.of(page, size,
                                 Sort.by("createdAt").descending()))));
     }
 
@@ -64,12 +65,12 @@ public class OrderController {
             @AuthenticationPrincipal User seller,
             @PathVariable Long storeId,
             @RequestParam(required = false) OrderStatus status,
-            @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int page,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 orderService.getStoreOrders(
                         storeId, seller.getId(), status,
-                        PageRequest.of(page, size,
+                        PaginationUtils.of(page, size,
                                 Sort.by("createdAt").descending()))));
     }
 

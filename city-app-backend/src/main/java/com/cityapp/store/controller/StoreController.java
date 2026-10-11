@@ -2,13 +2,13 @@ package com.cityapp.store.controller;
 
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
+import com.cityapp.common.pagination.PaginationUtils;
 import com.cityapp.store.dto.CreateStoreRequest;
 import com.cityapp.store.dto.StoreResponse;
 import com.cityapp.store.service.StoreService;
 import com.cityapp.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -68,11 +68,11 @@ public class StoreController {
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<ApiResponse<PageResponse<StoreResponse>>> myStores(
             @AuthenticationPrincipal User seller,
-            @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int page,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 storeService.getMyStores(seller,
-                        PageRequest.of(page, size,
+                        PaginationUtils.of(page, size,
                                 Sort.by("createdAt").descending()))));
     }
 
@@ -118,11 +118,11 @@ public class StoreController {
     @GetMapping("/pending-approvals")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<ApiResponse<PageResponse<StoreResponse>>> pendingApprovals(
-            @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int page,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size) {
         return ResponseEntity.ok(ApiResponse.ok(
                 storeService.getPendingApprovals(
-                        PageRequest.of(page, size,
+                        PaginationUtils.of(page, size,
                                 Sort.by("createdAt").ascending()))));
     }
 }

@@ -3,10 +3,10 @@ package com.cityapp.notification.controller;
 import com.cityapp.common.exception.AppException;
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
+import com.cityapp.common.pagination.PaginationUtils;
 import com.cityapp.notification.dto.NotificationResponse;
 import com.cityapp.notification.service.InAppNotificationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
@@ -30,11 +30,11 @@ public class NotificationController {
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<NotificationResponse>>> getNotifications(
             @AuthenticationPrincipal(expression = "userId") String userId,
-            @RequestParam(name = "page", defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "page", defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int page,
+            @RequestParam(name = "size", defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int size,
             @RequestParam(name = "unreadOnly", defaultValue = "false") boolean unreadOnly) {
 
-        Pageable pageable = PageRequest.of(page, size,
+        Pageable pageable = PaginationUtils.of(page, size,
                 Sort.by("createdAt").descending());
 
         return ResponseEntity.ok(ApiResponse.ok(

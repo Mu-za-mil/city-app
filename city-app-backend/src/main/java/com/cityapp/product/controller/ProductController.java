@@ -2,6 +2,7 @@ package com.cityapp.product.controller;
 
 import com.cityapp.common.response.ApiResponse;
 import com.cityapp.common.response.PageResponse;
+import com.cityapp.common.pagination.PaginationUtils;
 import com.cityapp.product.dto.CreateProductRequest;
 import com.cityapp.product.dto.ProductResponse;
 import com.cityapp.product.service.ProductService;
@@ -32,8 +33,8 @@ public class ProductController {
             @RequestParam(required = false) Long       categoryId,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
-            @RequestParam(defaultValue = "0")    int  page,
-            @RequestParam(defaultValue = "20")   int  size,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int  page,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int  size,
             @RequestParam(defaultValue = "name") String sort) {
 
         // Build sort from query param
@@ -44,7 +45,7 @@ public class ProductController {
             case "newest"       -> Sort.by("createdAt").descending();
             default             -> Sort.by("name").ascending();
         };
-        Pageable pageable = PageRequest.of(page, size, sortObj);
+        Pageable pageable = PaginationUtils.of(page, size, sortObj);
 
         return ResponseEntity.ok(ApiResponse.ok(
                 productService.searchProducts(
