@@ -49,7 +49,7 @@ class RequestDtoValidationTest {
     void acceptsOrderRequestWithRequiredFieldsAndValidItems() {
         PlaceOrderRequest request = new PlaceOrderRequest();
         request.setStoreId(1L);
-        request.setOrderType(OrderType.PICKUP);
+        request.setOrderType(OrderType.TAKEAWAY);
         request.setItems(List.of(new OrderItemRequest(2L, 1)));
 
         assertTrue(validator.validate(request).isEmpty());
