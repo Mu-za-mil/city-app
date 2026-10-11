@@ -31,6 +31,7 @@ public class StoreResponse {
     private String      logoUrl;
     private String      bannerUrl;
     private Instant     createdAt;
+    @Setter
     private Double      distanceKm;
     // distanceKm: populated by nearby search. null for non-nearby queries.
 }
