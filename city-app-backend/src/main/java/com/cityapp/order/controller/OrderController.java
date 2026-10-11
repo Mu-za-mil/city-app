@@ -70,7 +70,7 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.ok(
                 orderService.getStoreOrders(
                         storeId, seller.getId(), status,
-                        PageRequest.of(page, size,
+                        PaginationUtils.of(page, size,
                                 Sort.by("createdAt").descending()))));
     }
 
