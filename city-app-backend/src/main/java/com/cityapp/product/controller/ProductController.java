@@ -33,8 +33,8 @@ public class ProductController {
             @RequestParam(required = false) Long       categoryId,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
-            @RequestParam(defaultValue = "0")    int  page,
-            @RequestParam(defaultValue = "20")   int  size,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_PAGE_VALUE) int  page,
+            @RequestParam(defaultValue = PaginationUtils.DEFAULT_SIZE_VALUE) int  size,
             @RequestParam(defaultValue = "name") String sort) {
 
         // Build sort from query param
