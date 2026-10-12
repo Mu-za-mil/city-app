@@ -86,7 +86,7 @@ class PaymentWebhookEventRepositoryIntegrationTest {
     }
 
     @Configuration(proxyBeanMethods = false)
-    @EntityScan(basePackageClasses = PaymentWebhookEvent.class)
+    @EntityScan(basePackages = "com.cityapp")
     @EnableJpaRepositories(
             basePackageClasses = PaymentWebhookEventRepository.class,
             excludeFilters = @Filter(
