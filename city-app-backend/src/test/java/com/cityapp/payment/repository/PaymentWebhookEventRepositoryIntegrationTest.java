@@ -114,7 +114,6 @@ class PaymentWebhookEventRepositoryIntegrationTest {
 
         try {
             for (int i = 0; i < workerCount; i++) {
-                final int worker = i;
                 results.add(executor.submit(() -> {
                     ready.countDown();
                     if (!start.await(10, TimeUnit.SECONDS)) {
