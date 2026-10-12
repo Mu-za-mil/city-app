@@ -79,7 +79,7 @@ class PaymentWebhookEventRepositoryIntegrationTest {
 
     @Test
     void insertIfAbsent_shouldPersistEventInPostgres() {
-        int inserted = repository.insertIfAbsent("evt_postgres_1", "payment.captured");
+        int inserted = insertEvent("evt_postgres_1", "payment.captured");
 
         assertEquals(1, inserted);
 
@@ -92,9 +92,9 @@ class PaymentWebhookEventRepositoryIntegrationTest {
 
     @Test
     void insertIfAbsent_shouldIgnoreDuplicateEventIdAndPreserveOriginalEvent() {
-        assertEquals(1, repository.insertIfAbsent("evt_duplicate", "payment.captured"));
+        assertEquals(1, insertEvent("evt_duplicate", "payment.captured"));
 
-        int duplicateInserted = repository.insertIfAbsent("evt_duplicate", "payment.failed");
+        int duplicateInserted = insertEvent("evt_duplicate", "payment.failed");
 
         assertEquals(0, duplicateInserted);
         List<PaymentWebhookEvent> events = repository.findAll();
@@ -153,9 +153,14 @@ class PaymentWebhookEventRepositoryIntegrationTest {
 
         assertEquals(0L, repository.count(), "The event insert should roll back with failed processing");
 
-        assertEquals(1, repository.insertIfAbsent("evt_retry_after_failure", "payment.captured"),
+        assertEquals(1, insertEvent("evt_retry_after_failure", "payment.captured"),
                 "A retry should be able to claim the event after rollback");
         assertEquals(1L, repository.count());
+    }
+
+    private int insertEvent(String eventId, String eventType) {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        return transactionTemplate.execute(status -> repository.insertIfAbsent(eventId, eventType));
     }
 
     @Configuration(proxyBeanMethods = false)
