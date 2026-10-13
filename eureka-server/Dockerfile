@@ -1,28 +1,21 @@
-# Dockerfile
+# Runtime-only image: Maven builds target/app.jar before this image is built.
 FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Copy the fat JAR (built by Maven)
-COPY target/*.jar app.jar
+# curl is retained for the existing Docker Compose Eureka health check.
+# Create an unprivileged runtime identity and prepare the application directory.
+RUN apk add --no-cache curl \
+    && addgroup -S appgroup \
+    && adduser -S -D -H -G appgroup appuser \
+    && mkdir -p /app/logs \
+    && chown -R appuser:appgroup /app
 
-RUN apk add --no-cache curl
+COPY --chown=appuser:appgroup target/app.jar /app/app.jar
 
-# Create non-root user (security best practice)
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser:appgroup
 
-RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
+# Documentation only; Spring Boot configures the actual listening port.
+EXPOSE 8761
 
-USER appuser
-
-EXPOSE 8080
-
-# JVM tuning for containers:
-# -XX:+UseContainerSupport: JVM reads container memory limits (not host)
-# -XX:MaxRAMPercentage=75.0: Use 75% of container RAM for JVM heap
-# -XX:+ExitOnOutOfMemoryError: crash-fast instead of limping along
-ENTRYPOINT ["java", \
-            "-XX:+UseContainerSupport", \
-            "-XX:MaxRAMPercentage=75.0", \
-            "-XX:+ExitOnOutOfMemoryError", \
-            "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-XX:+ExitOnOutOfMemoryError", "-jar", "/app/app.jar"]

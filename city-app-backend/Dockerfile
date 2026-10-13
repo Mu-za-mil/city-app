@@ -1,26 +1,19 @@
-# Dockerfile
+# Runtime-only image: Maven builds target/app.jar before this image is built.
 FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Copy the fat JAR (built by Maven)
-COPY target/*.jar app.jar
+# Create an unprivileged runtime identity and prepare the application directory.
+RUN addgroup -S appgroup \
+    && adduser -S -D -H -G appgroup appuser \
+    && mkdir -p /app/logs \
+    && chown -R appuser:appgroup /app
 
-# Create non-root user (security best practice)
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+COPY --chown=appuser:appgroup target/app.jar /app/app.jar
 
-RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
+USER appuser:appgroup
 
-USER appuser
-
+# Documentation only; Spring Boot configures the actual listening port.
 EXPOSE 8080
 
-# JVM tuning for containers:
-# -XX:+UseContainerSupport: JVM reads container memory limits (not host)
-# -XX:MaxRAMPercentage=75.0: Use 75% of container RAM for JVM heap
-# -XX:+ExitOnOutOfMemoryError: crash-fast instead of limping along
-ENTRYPOINT ["java", \
-            "-XX:+UseContainerSupport", \
-            "-XX:MaxRAMPercentage=75.0", \
-            "-XX:+ExitOnOutOfMemoryError", \
-            "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-XX:+ExitOnOutOfMemoryError", "-jar", "/app/app.jar"]
