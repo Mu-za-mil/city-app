@@ -1,0 +1,25 @@
+# Local and sensitive files
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+
+# IDE and developer files
+.idea/
+.vscode/
+*.iml
+
+# Logs and local runtime output
+logs/
+*.log
+
+# The image only needs the prebuilt executable JAR.
+src/
+.mvn/
+mvnw
+mvnw.cmd
+pom.xml
+README*
+target/*
+!target/app.jar
