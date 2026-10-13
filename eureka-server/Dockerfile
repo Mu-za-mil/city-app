@@ -5,9 +5,10 @@ WORKDIR /app
 
 # curl is retained for the existing Docker Compose Eureka health check.
 # Create an unprivileged runtime identity and prepare the application directory.
-RUN addgroup -S appgroup \
+RUN apk add --no-cache curl \
+    && addgroup -S appgroup \
     && adduser -S -D -H -G appgroup appuser \
-    && apk add --no-cache curl \\\n    && mkdir -p /app/logs \
+    && mkdir -p /app/logs \
     && chown -R appuser:appgroup /app
 
 COPY --chown=appuser:appgroup target/app.jar /app/app.jar
