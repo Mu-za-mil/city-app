@@ -4,7 +4,7 @@ set -euo pipefail
 # The CI workflow starts the stack on this Compose project network.
 network="${SMOKE_NETWORK:-cityapp-ci_cityapp-network}"
 
-docker run --rm --network "$network" curlimages/curl:8.12.1 sh -ec '
+if ! docker run --rm --network "$network" curlimages/curl:8.12.1 sh -ec '
   for target in \
     "Eureka|http://eureka-server:8761/actuator/health" \
     "API Gateway|http://api-gateway:8000/actuator/health" \
@@ -31,8 +31,22 @@ docker run --rm --network "$network" curlimages/curl:8.12.1 sh -ec '
 
     if [ "$healthy" -ne 1 ]; then
       echo "FAIL: ${name} did not report UP at ${url}"
+      echo "Health response:"
       curl --silent --show-error "$url" || true
+      if [ "$name" = "Main Backend" ]; then
+        echo
+        echo "Readiness health response:"
+        curl --silent --show-error "http://main-service:8080/actuator/health/readiness" || true
+        echo
+        echo "Liveness health response:"
+        curl --silent --show-error "http://main-service:8080/actuator/health/liveness" || true
+      fi
       exit 1
     fi
   done
-'
+'; then
+  echo "::group::Main Backend container logs (last 300 lines)"
+  docker logs --tail 300 cityapp-main || true
+  echo "::endgroup::"
+  exit 1
+fi
