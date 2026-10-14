@@ -1,0 +1,21 @@
+# CI-only overlay: run the already-built SHA-tagged images without rebuilding them.
+services:
+  eureka-server:
+    image: city-app/eureka-server:${IMAGE_TAG:?IMAGE_TAG must be set}
+    build: null
+
+  api-gateway:
+    image: city-app/api-gateway:${IMAGE_TAG:?IMAGE_TAG must be set}
+    build: null
+
+  auth-service:
+    image: city-app/auth-service:${IMAGE_TAG:?IMAGE_TAG must be set}
+    build: null
+
+  notification-service:
+    image: city-app/notification-service:${IMAGE_TAG:?IMAGE_TAG must be set}
+    build: null
+
+  main-service:
+    image: city-app/city-app-backend:${IMAGE_TAG:?IMAGE_TAG must be set}
+    build: null
