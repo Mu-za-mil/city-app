@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   test-and-build-images:
-    name: Verify Maven, build Docker images, and smoke test containers (Java 21)
+    name: Verify Maven, build, scan, and smoke test Docker images (Java 21)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
@@ -46,6 +46,58 @@ jobs:
 
       - name: Build Main Backend image
         run: docker build --tag "city-app/city-app-backend:${GITHUB_SHA}" ./city-app-backend
+
+      # Fail the CI job for fixable HIGH or CRITICAL image vulnerabilities.
+      # Unfixed findings are reported but do not block the pipeline.
+      - name: Scan API Gateway image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: city-app/api-gateway:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Scan Auth Service image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: city-app/auth-service:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Scan Notification Service image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: city-app/notification-service:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Scan Eureka Server image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: city-app/eureka-server:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Scan Main Backend image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: city-app/city-app-backend:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
 
       - name: Prepare smoke-test environment
         run: cp .env.example .env
