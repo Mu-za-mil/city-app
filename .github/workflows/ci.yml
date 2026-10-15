@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   test-and-build-images:
-    name: Verify Maven and build Docker images (Java 21)
+    name: Verify Maven, build Docker images, and smoke test containers (Java 21)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
@@ -46,3 +46,30 @@ jobs:
 
       - name: Build Main Backend image
         run: docker build --tag "city-app/city-app-backend:${GITHUB_SHA}" ./city-app-backend
+
+      - name: Prepare smoke-test environment
+        run: cp .env.example .env
+
+      - name: Start application and infrastructure containers
+        run: |
+          IMAGE_TAG="${GITHUB_SHA}" docker compose \
+            -p cityapp-ci \
+            -f docker-compose.yml \
+            -f docker-compose.ci-smoke.yml \
+            --profile infra --profile core \
+            up -d --no-build
+
+      - name: Smoke test all five service health endpoints
+        run: bash scripts/ci/docker-smoke-test.sh
+
+      - name: Stop smoke-test containers
+        if: always()
+        run: |
+          if [ -f .env ]; then
+            IMAGE_TAG="${GITHUB_SHA}" docker compose \
+              -p cityapp-ci \
+              -f docker-compose.yml \
+              -f docker-compose.ci-smoke.yml \
+              --profile infra --profile core \
+              down --volumes --remove-orphans
+          fi
