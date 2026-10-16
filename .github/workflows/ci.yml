@@ -23,6 +23,187 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up kubectl for manifest validation
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.32.0'
+
+      - name: Render Kubernetes manifests (validation only)
+        run: |
+          set -euo pipefail
+          kubectl kustomize k8s/base > /tmp/city-app-k8s-rendered.yaml
+          grep -q '^kind: Namespace        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build all Maven modules and run tests
+        run: mvn --batch-mode --no-transfer-progress verify
+
+      - name: Build API Gateway image
+        run: docker build --tag "city-app/api-gateway:${GITHUB_SHA}" ./api-gateway
+
+      - name: Build Auth Service image
+        run: docker build --tag "city-app/auth-service:${GITHUB_SHA}" ./auth-service
+
+      - name: Build Notification Service image
+        run: docker build --tag "city-app/notification-service:${GITHUB_SHA}" ./notification-service
+
+      - name: Build Eureka Server image
+        run: docker build --tag "city-app/eureka-server:${GITHUB_SHA}" ./eureka-server
+
+      - name: Build Main Backend image
+        run: docker build --tag "city-app/city-app-backend:${GITHUB_SHA}" ./city-app-backend
+
+      - name: Prepare smoke-test environment
+        run: cp .env.example .env
+
+      - name: Start application and infrastructure containers
+        run: |
+          IMAGE_TAG="${GITHUB_SHA}" docker compose \
+            -p cityapp-ci \
+            -f docker-compose.yml \
+            -f docker-compose.ci-smoke.yml \
+            --profile infra --profile core \
+            up -d --no-build
+
+      - name: Smoke test all five service health endpoints
+        run: bash scripts/ci/docker-smoke-test.sh
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the smoke-tested images to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          owner="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+
+          while IFS=':' read -r local_name package_name; do
+            local_image="city-app/${local_name}:${GITHUB_SHA}"
+            registry_image="ghcr.io/${owner}/${package_name}:${GITHUB_SHA}"
+
+            echo "Tagging ${local_image} as ${registry_image}"
+            docker tag "${local_image}" "${registry_image}"
+
+            echo "Publishing ${registry_image}"
+            docker push "${registry_image}"
+          done <<'IMAGES'
+          api-gateway:city-app-api-gateway
+          auth-service:city-app-auth-service
+          notification-service:city-app-notification-service
+          eureka-server:city-app-eureka-server
+          city-app-backend:city-app-backend
+          IMAGES
+
+      - name: Stop smoke-test containers
+        if: always()
+        run: |
+          if [ -f .env ]; then
+            IMAGE_TAG="${GITHUB_SHA}" docker compose \
+              -p cityapp-ci \
+              -f docker-compose.yml \
+              -f docker-compose.ci-smoke.yml \
+              --profile infra --profile core \
+              down --volumes --remove-orphans
+          fi
+ /tmp/city-app-k8s-rendered.yaml
+          grep -q '^  name: city-app        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build all Maven modules and run tests
+        run: mvn --batch-mode --no-transfer-progress verify
+
+      - name: Build API Gateway image
+        run: docker build --tag "city-app/api-gateway:${GITHUB_SHA}" ./api-gateway
+
+      - name: Build Auth Service image
+        run: docker build --tag "city-app/auth-service:${GITHUB_SHA}" ./auth-service
+
+      - name: Build Notification Service image
+        run: docker build --tag "city-app/notification-service:${GITHUB_SHA}" ./notification-service
+
+      - name: Build Eureka Server image
+        run: docker build --tag "city-app/eureka-server:${GITHUB_SHA}" ./eureka-server
+
+      - name: Build Main Backend image
+        run: docker build --tag "city-app/city-app-backend:${GITHUB_SHA}" ./city-app-backend
+
+      - name: Prepare smoke-test environment
+        run: cp .env.example .env
+
+      - name: Start application and infrastructure containers
+        run: |
+          IMAGE_TAG="${GITHUB_SHA}" docker compose \
+            -p cityapp-ci \
+            -f docker-compose.yml \
+            -f docker-compose.ci-smoke.yml \
+            --profile infra --profile core \
+            up -d --no-build
+
+      - name: Smoke test all five service health endpoints
+        run: bash scripts/ci/docker-smoke-test.sh
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the smoke-tested images to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          owner="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+
+          while IFS=':' read -r local_name package_name; do
+            local_image="city-app/${local_name}:${GITHUB_SHA}"
+            registry_image="ghcr.io/${owner}/${package_name}:${GITHUB_SHA}"
+
+            echo "Tagging ${local_image} as ${registry_image}"
+            docker tag "${local_image}" "${registry_image}"
+
+            echo "Publishing ${registry_image}"
+            docker push "${registry_image}"
+          done <<'IMAGES'
+          api-gateway:city-app-api-gateway
+          auth-service:city-app-auth-service
+          notification-service:city-app-notification-service
+          eureka-server:city-app-eureka-server
+          city-app-backend:city-app-backend
+          IMAGES
+
+      - name: Stop smoke-test containers
+        if: always()
+        run: |
+          if [ -f .env ]; then
+            IMAGE_TAG="${GITHUB_SHA}" docker compose \
+              -p cityapp-ci \
+              -f docker-compose.yml \
+              -f docker-compose.ci-smoke.yml \
+              --profile infra --profile core \
+              down --volumes --remove-orphans
+          fi
+ /tmp/city-app-k8s-rendered.yaml
+          echo "Kustomize render passed. No cluster was contacted and nothing was deployed."
+
       - name: Set up Java 21
         uses: actions/setup-java@v6
         with:
