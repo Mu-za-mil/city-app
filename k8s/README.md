@@ -6,6 +6,7 @@ This directory is the starting point for a staged Kubernetes deployment. It is i
 
 - `base/namespace.yaml` defines the isolated `city-app` namespace.
 - `base/kustomization.yaml` is the Kustomize entry point and applies a shared application label.
+- `DEPENDENCIES.md` inventories the existing service configuration and the decisions required before adding workloads.
 - CI renders the Kustomize base to catch structural/rendering errors before any cluster deployment.
 
 ## Deliberately not included yet
