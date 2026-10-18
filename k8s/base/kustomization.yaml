@@ -3,6 +3,8 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - eureka-deployment.yaml
+  - eureka-service.yaml
 
 labels:
   - pairs:

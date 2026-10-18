@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eureka-server
+  namespace: city-app
+  labels:
+    app: eureka-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eureka-server
+  template:
+    metadata:
+      labels:
+        app: eureka-server
+    spec:
+      containers:
+        - name: eureka-server
+          image: city-app/eureka-server:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8761
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 20
+            failureThreshold: 3

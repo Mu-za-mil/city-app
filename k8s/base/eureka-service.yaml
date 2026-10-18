@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: eureka-server
+  namespace: city-app
+  labels:
+    app: eureka-server
+spec:
+  type: ClusterIP
+  selector:
+    app: eureka-server
+  ports:
+    - name: http
+      port: 8761
+      targetPort: http
+      protocol: TCP
