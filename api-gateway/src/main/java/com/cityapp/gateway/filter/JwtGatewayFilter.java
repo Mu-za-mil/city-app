@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -52,7 +53,7 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
                 .headers(headers -> REMOVED_HEADERS.forEach(headers::remove))
                 .build();
 
-        if (isOpenPath(path)) {
+        if (isOpenPath(sanitizedRequest.getMethod(), path)) {
             return chain.filter(exchange.mutate()
                     .request(sanitizedRequest)
                     .build());
@@ -93,8 +94,9 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
         }
     }
 
-    private boolean isOpenPath(String path) {
-        return OPEN_EXACT_PATHS.contains(path)
+    boolean isOpenPath(HttpMethod method, String path) {
+        return (method == HttpMethod.GET && "/api/v1/categories".equals(path))
+                || OPEN_EXACT_PATHS.contains(path)
                 || OPEN_PREFIX_PATHS.stream().anyMatch(path::startsWith);
     }
 
