@@ -1,0 +1,97 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: main-service
+  namespace: city-app
+  labels:
+    app: main-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: main-service
+  template:
+    metadata:
+      labels:
+        app: main-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: main-service
+          image: city-app/main-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DB_URL
+              value: "jdbc:postgresql://host.docker.internal:5433/cityapp"
+            - name: DB_USERNAME
+              value: "cityapp"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: city-app-auth-secrets
+                  key: DB_PASSWORD
+            - name: REDIS_HOST
+              value: "host.docker.internal"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: KAFKA_BROKERS
+              value: "host.docker.internal:29092"
+            - name: MAIL_HOST
+              value: "host.docker.internal"
+            - name: MAIL_PORT
+              value: "1025"
+            - name: EUREKA_HOST
+              value: "eureka-server"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: city-app-auth-secrets
+                  key: JWT_SECRET
+            - name: RAZORPAY_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: city-app-main-secrets
+                  key: RAZORPAY_KEY_ID
+            - name: RAZORPAY_KEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: city-app-main-secrets
+                  key: RAZORPAY_KEY_SECRET
+            - name: RAZORPAY_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: city-app-main-secrets
+                  key: RAZORPAY_WEBHOOK_SECRET
+            - name: ZIPKIN_URL
+              value: "http://host.docker.internal:9411/api/v2/spans"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 750m
+              memory: 768Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            timeoutSeconds: 5
+            periodSeconds: 20
+            failureThreshold: 3

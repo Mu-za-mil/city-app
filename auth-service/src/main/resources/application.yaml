@@ -50,6 +50,7 @@ eureka:
     service-url:
       defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
   instance:
+    prefer-ip-address: true
     instance-id: ${spring.application.name}:${server.port}
     # Unique instance ID: "auth-service:8081"
     # If running 3 instances: "auth-service:8081", "auth-service:8082", "auth-service:8083"

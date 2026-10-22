@@ -1,10 +1,18 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
   - namespace.yaml
   - eureka-deployment.yaml
   - eureka-service.yaml
+  - auth-deployment.yaml
+  - auth-service.yaml
+  - gateway-deployment.yaml
+  - gateway-service.yaml
+  - main-deployment.yaml
+  - main-service.yaml
+  - notification-deployment.yaml
+  - notification-service.yaml
 
 labels:
   - pairs:
