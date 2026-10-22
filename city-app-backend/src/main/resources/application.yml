@@ -369,6 +369,8 @@ management:
           # Kubernetes readiness probe reads /actuator/health.
           # OPEN circuit → unhealthy → pod removed from load balancer rotation.
           # Traffic goes to other instances until circuit closes.
+        mail:
+          enabled: false
 
         # Resilience4j metrics in Prometheus format
         

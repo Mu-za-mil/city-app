@@ -1,0 +1,74 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: city-app
+  labels:
+    app: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - name: notification-service
+          image: city-app/notification-service:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8083
+          env:
+            - name: DB_URL
+              value: "jdbc:postgresql://host.docker.internal:5433/cityapp"
+            - name: DB_USERNAME
+              value: "cityapp"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: city-app-auth-secrets
+                  key: DB_PASSWORD
+            - name: REDIS_HOST
+              value: "host.docker.internal"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: KAFKA_BROKERS
+              value: "host.docker.internal:29092"
+            - name: EUREKA_HOST
+              value: "eureka-server"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: city-app-auth-secrets
+                  key: JWT_SECRET
+            - name: MAIL_HOST
+              value: "host.docker.internal"
+            - name: MAIL_PORT
+              value: "1025"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
