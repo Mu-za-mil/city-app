@@ -11,7 +11,7 @@
   <img alt="Maven" src="https://img.shields.io/badge/Maven-Multi--Module-C71A36?logo=apachemaven&logoColor=white" />
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" />
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" />
-  <img alt="Kubernetes" src="https://img.shields.io/badge/Kubernetes-Local%20Deployment-326CE5?logo=kubernetes&logoColor=white" />
+  <img alt="Kubernetes" src="https://img.shields.io/badge/Kubernetes-Local%20Foundation-326CE5?logo=kubernetes&logoColor=white" />
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@ The repository is organized as a **Maven multi-module project** with independent
 
 The project is also a practical engineering environment for exploring service boundaries, API security, relational persistence, asynchronous messaging, containerization, CI validation, and a gradual path toward Kubernetes.
 
-> **Project status:** The repository now includes a Kustomize base with Deployments and ClusterIP Services for Eureka, Auth, API Gateway, Main Backend, and Notification. The local `kind` rollout is still being validated: manifest rendering and in-cluster PostgreSQL connectivity have been verified, but Auth and Main startup issues remain under investigation. The manifests should not be interpreted as proof that every workload is healthy.
+> **Project status:** The service-oriented backend and Docker-based workflow are the primary development path. Kubernetes manifests currently provide a local foundation, including the namespace and Eureka Deployment/Service; Kubernetes rollout of every service is not represented as complete.
 
 ## Product vision
 
@@ -124,18 +124,18 @@ flowchart LR
       Registry[GHCR image publishing]
     end
 
-    subgraph LocalK8s["Local Kubernetes deployment"]
+    subgraph LocalK8s["Local Kubernetes foundation"]
       Kind[kind cluster]
       Namespace[city-app namespace]
-      Workloads[Five service Deployments + ClusterIP Services]
+      EurekaPod[Eureka Deployment + Service]
     end
 
     Source --> Maven --> Compose
     Source --> Tests --> Images --> Smoke --> Registry
-    Source --> Kind --> Namespace --> Workloads
+    Source --> Kind --> Namespace --> EurekaPod
 ```
 
-The CI workflow validates Kubernetes manifest rendering but does **not** deploy to a cluster. The Kustomize base now defines Deployments and ClusterIP Services for the five application workloads. For local development, PostgreSQL, Redis, and Kafka can remain in Docker Compose while the application workloads run in kind; this hybrid setup requires explicit cross-network connectivity and runtime verification.
+The CI workflow validates Kubernetes manifest rendering but does **not** deploy to a cluster. The current Kubernetes base is intentionally incremental; the full application continues to use Docker Compose for its primary local multi-service workflow.
 
 ## Services and modules
 
@@ -181,7 +181,7 @@ This is a pragmatic service-oriented design: not every domain needs to become a 
 | Containers | Docker, Docker Compose |
 | CI | GitHub Actions |
 | Registry | GitHub Container Registry (GHCR) |
-| Kubernetes | kind, kubectl, Kustomize (local service deployments) |
+| Kubernetes | kind, kubectl, Kustomize (local foundation) |
 
 ## Architecture decisions
 
@@ -217,7 +217,7 @@ Kafka provides a message-broker foundation for decoupled event-driven processing
 
 ### 6. Containers before full orchestration
 
-Docker Compose remains useful for local dependencies, while a local kind cluster hosts the application workload manifests. The Kustomize base defines Deployments and ClusterIP Services for Eureka, Auth, API Gateway, Main Backend, and Notification; runtime health and dependency integration must still be verified service by service.
+Docker Compose is the simplest way to run the current multi-service system locally. Kubernetes is being introduced incrementally, starting with a local kind cluster and a small validated manifest base.
 
 **Trade-off:** Compose is faster for local development; Kubernetes adds orchestration capabilities but also introduces cluster networking, probes, secrets, resource sizing, and rollout complexity.
 
@@ -435,23 +435,23 @@ The pipeline's Kubernetes step is **manifest validation only**. It does not appl
 
 ## Kubernetes direction
 
-The local Kubernetes environment uses a `kind` cluster named `city-app-local` and the `city-app` namespace. The `k8s/base` Kustomize base defines:
+The Kubernetes work begins with a local `kind` cluster and the `city-app` namespace. The current `k8s/base` Kustomize base includes:
 
 - The `city-app` namespace.
-- Deployments and ClusterIP Services for Eureka, Auth, API Gateway, Main Backend, and Notification.
-- Container ports, HTTP startup/liveness/readiness probes where configured, and resource requests/limits.
-- Explicit local image tags such as `city-app/auth-service:local` with `imagePullPolicy: Never` for images loaded into the kind node.
-- Kubernetes Secret references for database, JWT, and payment credentials instead of literal credential values in workload manifests.
+- An Eureka Deployment.
+- An Eureka ClusterIP Service.
+- Resource requests/limits and HTTP liveness/readiness probes for Eureka.
 
-**Validation status:** `kubectl kustomize k8s/base` renders successfully, and a pod in the namespace successfully connected to the Compose-hosted PostgreSQL instance. Auth and Main have had startup failures during local rollout, so application health and end-to-end request flow are still being debugged. The manifests describe the intended workload configuration; they do not guarantee all pods are healthy.
+The local workflow uses explicitly tagged images and can use `imagePullPolicy: Never` for images loaded into the kind node. The broader rollout should proceed service by service, with configuration and secrets handled deliberately.
 
-A practical next sequence is:
+A typical next sequence is:
 
-1. Verify each workload’s image, environment variables, Secret references, and probes.
-2. Inspect startup logs and resolve Auth/Main application initialization failures.
-3. Confirm all pods become Ready and Services have healthy endpoints.
-4. Test gateway routing, Eureka registration, and dependency connectivity from the cluster.
-5. Add resource policies, autoscaling, network restrictions, and deployment automation when the workload and operational needs justify them.
+1. Validate the rendered manifests.
+2. Build and load one service image into kind.
+3. Deploy it with a Service and suitable probes.
+4. Verify DNS, readiness, logs, and dependency connectivity.
+5. Add the next service only after the previous checkpoint is healthy.
+6. Add resource policies, autoscaling, network restrictions, and deployment automation when the workload and operational needs justify them.
 
 PostgreSQL, Redis, and Kafka can remain in Docker Compose during early local Kubernetes work to keep the development environment manageable. Cross-environment networking must be configured explicitly; Kubernetes service DNS does not automatically resolve Compose service names.
 
@@ -467,7 +467,7 @@ city-app/
 ├── cityapp-common/           # Shared application module
 ├── cityapp-security/         # Shared security components
 ├── k8s/
-│   └── base/                 # Namespace, Deployments, Services, and Kustomize config
+│   └── base/                 # Kustomize namespace and Eureka resources
 ├── scripts/
 │   └── ci/                   # CI smoke-test scripts
 ├── .github/
@@ -509,8 +509,8 @@ kubectl kustomize k8s/base
 - [x] Organize the backend as a Maven multi-module repository.
 - [x] Establish separate runtime modules for gateway, authentication, main backend, notification, and service discovery.
 - [x] Add a CI workflow for Maven verification, service image builds, and health smoke tests.
-- [x] Add a Kustomize base with Deployments and ClusterIP Services for Eureka, Auth, Gateway, Main, and Notification.
-- [ ] Complete Kubernetes runtime health checks and validate end-to-end gateway/service discovery flows.
+- [x] Add a Kustomize base with a namespace and Eureka resources.
+- [ ] Expand Kubernetes resources to cover the remaining application services.
 - [ ] Document endpoint contracts and role-based access by domain.
 - [ ] Strengthen automated integration and failure-path coverage as workflows mature.
 - [ ] Evolve deployment automation after local Kubernetes behavior is repeatable.
